@@ -8,31 +8,28 @@ import { load } from 'cheerio';
 const router = Router();
 
 const createPost = async (req, res) => {
-  const { title, content, username, password, loginUrl, newPostUrl } = req.body;
+  const { title, content, username, password, urls } = req.body;
 
-  if (!title || !content || !username || !password) {
-    return res.status(400).json({ error: 'Missing required fields: title, content, username, or password.' });
+  if (!title || !content || !username || !password || !urls || !Array.isArray(urls) || urls.length === 0) {
+    return res.status(400).json({ error: 'Missing required fields. Make sure to provide title, content, username, password, and a non-empty array of urls.' });
   }
 
-  const LOGIN_URL = loginUrl || 'https://uzblog.net/login';
-  const NEW_POST_URL = newPostUrl || 'https://uzblog.net/new-post';
-
   // Step 1: Login with Playwright and get cookies + hidden fields
-  const loginAndExtract = async () => {
+  const loginAndExtract = async (loginUrl, newPostUrl) => {
     const browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext();
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const page = await context.newPage();
 
-    console.log('🔐 Logging in...');
-    await page.goto(LOGIN_URL);
-    await page.fill('input[name="username"]', username);
-    await page.fill('input[name="password"]', password);
+    console.log(`🔐 Logging in to ${loginUrl}...`);
+    await page.goto(loginUrl+"/login");
+    await page.fill('input[name="username"], input[name="usr"]', username);
+    await page.fill('input[name="password"], input[name="pass"]', password);
     await page.click('input[type="submit"]');
 
     await page.waitForTimeout(3000);
 
     console.log('✅ Logged in, navigating to new post page...');
-    await page.goto(NEW_POST_URL);
+    await page.goto(newPostUrl);
     await page.waitForSelector('input[name="post_title"]');
 
     const cookies = await context.cookies();
@@ -50,7 +47,7 @@ const createPost = async (req, res) => {
   };
 
   // Step 2: Use Axios with cookies to submit a new post
-  const postWithAxios = async (cookies, hiddenInputs) => {
+  const postWithAxios = async (newPostUrl, cookies, hiddenInputs) => {
     const jar = new CookieJar();
     for (const cookie of cookies) {
       const url = `https://${cookie.domain.replace(/^\./, '')}`;
@@ -69,8 +66,8 @@ const createPost = async (req, res) => {
 
     const body = new URLSearchParams(form).toString();
 
-    console.log('📤 Posting article...');
-    const postRes = await client.post(NEW_POST_URL, body, {
+    console.log(`📤 Posting article to ${newPostUrl}...`);
+    const postRes = await client.post(newPostUrl, body, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -80,23 +77,43 @@ const createPost = async (req, res) => {
 
     // Extract post URL from response
     const $ = load(postRes.data);
-    const finalUrl = $('#successfully_posted_url a').attr('href');
+    let finalUrl = $('#successfully_posted_url a').attr('href');
+    if (!finalUrl) {
+      finalUrl = $('#published-url a').attr('href');
+    }
 
-    console.log(finalUrl ? `✅ Post URL: ${finalUrl}` : '❌ Post URL not found.');
+    console.log(finalUrl ? `✅ Post URL: ${finalUrl}` : `❌ Post URL not found on ${newPostUrl}.`);
     return finalUrl;
   };
 
-  try {
-    const { cookies, hiddenInputs } = await loginAndExtract();
-    const postUrl = await postWithAxios(cookies, hiddenInputs);
-    if (postUrl) {
-      res.status(200).json({ success: true, postUrl });
-    } else {
-      res.status(500).json({ success: false, message: 'Failed to create post.' });
+  const promises = urls.map(async (loginUrl) => {
+    try {
+      const urlObject = new URL(loginUrl);
+      const pathParts = urlObject.pathname.split('/');
+      pathParts.pop(); // Remove the last part (e.g., 'login')
+      pathParts.push('new-post');
+      urlObject.pathname = pathParts.join('/');
+      const newPostUrl = urlObject.href;
+
+      const { cookies, hiddenInputs } = await loginAndExtract(loginUrl, newPostUrl);
+      const postUrl = await postWithAxios(newPostUrl, cookies, hiddenInputs);
+      if (postUrl) {
+        return { success: true, postUrl, loginUrl };
+      } else {
+        return { success: false, message: 'Failed to create post.', loginUrl };
+      }
+    } catch (error) {
+      console.error(`Error during automated posting for ${loginUrl}:`, error);
+      return { success: false, message: 'An error occurred during automated posting.', error: error.message, loginUrl };
     }
-  } catch (error) {
-    console.error('Error during automated posting:', error);
-    res.status(500).json({ success: false, message: 'An error occurred during automated posting.', error: error.message });
+  });
+  
+  try {
+    const results = await Promise.all(promises);
+    res.status(200).json({ results });
+  } catch(error) {
+     console.error('An unexpected error occurred while processing posts:', error);
+     res.status(500).json({ success: false, message: 'An unexpected error occurred while processing posts.' });
   }
 };
 
