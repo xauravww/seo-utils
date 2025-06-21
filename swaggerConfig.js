@@ -30,7 +30,25 @@ const swaggerDefinition = {
   },
   security: [{
     sessionId: []
-  }]
+  }],
+  tags: [
+    {
+      name: 'Authentication',
+      description: 'Handles OAuth 2.0 flow with LinkedIn.',
+    },
+    {
+      name: 'Posts',
+      description: 'API for creating, reading, and deleting LinkedIn posts.',
+    },
+    {
+      name: 'Comments',
+      description: 'API for managing comments on LinkedIn posts.',
+    },
+    {
+      name: 'Reddit',
+      description: 'API for posting to Reddit.',
+    }
+  ]
 };
 
 const options = {

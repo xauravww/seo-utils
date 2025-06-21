@@ -15,7 +15,9 @@
     "cheerio": "^1.1.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "node-reddit-js": "^0.0.11",
     "playright": "^0.0.22",
+    "qs": "^6.14.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
     "tough-cookie": "^5.1.2"

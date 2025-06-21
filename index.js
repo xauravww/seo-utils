@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import linkedinRoutes from './routes/linkedinRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
 import postRoutes from './routes/postRoutes.js';
+import redditRoutes from './routes/redditRoutes.js';
 import { loadSessions } from './sessionStore.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swaggerConfig.js';
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use('/api', linkedinRoutes);
 app.use('/api', publishRoutes);
 app.use('/api', postRoutes);
+app.use('/api/reddit', redditRoutes);
 
 
 // Swagger UI
