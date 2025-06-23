@@ -3,9 +3,17 @@ import axios from 'axios';
 import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
 import { load } from 'cheerio';
+import { Worker } from 'worker_threads';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { log } from '../websocketLogger.js';
+import crypto from 'crypto';
+
+const __filename = fileURLToPath(import.meta.url);
+const CONCURRENCY_LIMIT = 2;
 
 const loginAndExtract = async (loginUrl, newPostUrl, username, password) => {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: false });
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const page = await context.newPage();
 
@@ -74,54 +82,85 @@ const postWithAxios = async (newPostUrl, cookies, hiddenInputs, title, content) 
   return finalUrl;
 };
 
-export const createPost = async (req, res) => {
-    const { title, content, username, password, urls } = req.body;
+export const createPost = (req, res) => {
+  const { title, content, username, password, urls } = req.body;
+  const requestId = crypto.randomUUID();
+
+  if (!title || !content || !username || !password || !urls || !Array.isArray(urls) || urls.length === 0) {
+    return res.status(400).json({ error: 'Missing required fields.' });
+  }
   
-    if (!title || !content || !username || !password || !urls || !Array.isArray(urls) || urls.length === 0) {
-      return res.status(400).json({ error: 'Missing required fields. Make sure to provide title, content, username, password, and a non-empty array of urls.' });
-    }
-  
-    const processSingleUrl = async (loginUrl) => {
-      try {
-        const urlObject = new URL(loginUrl);
-        const pathParts = urlObject.pathname.split('/');
-        pathParts.pop(); // Remove the last part (e.g., 'login')
-        pathParts.push('new-post');
-        urlObject.pathname = pathParts.join('/');
-        const newPostUrl = urlObject.href;
-  
-        const { cookies, hiddenInputs } = await loginAndExtract(loginUrl, newPostUrl, username, password);
-        const postUrl = await postWithAxios(newPostUrl, cookies, hiddenInputs, title, content);
-        if (postUrl) {
-          return { success: true, postUrl, loginUrl };
-        } else {
-          return { success: false, message: 'Failed to create post.', loginUrl };
-        }
-      } catch (error) {
-        console.error(`Error during automated posting for ${loginUrl}:`, error);
-        return { success: false, message: 'An error occurred during automated posting.', error: error.message, loginUrl };
+  // Immediately respond with the requestId
+  res.status(202).json({ 
+    message: 'Request accepted. Use the requestId to connect to the log stream.',
+    requestId: requestId
+  });
+
+  // --- Run the actual process in the background ---
+  const runInBackground = () => {
+    const workerPath = path.resolve(path.dirname(__filename), '..', 'wpWorker.js');
+    log(requestId, `🚀 Starting WordPress post creation for ${urls.length} sites. Concurrency: ${CONCURRENCY_LIMIT}.`);
+
+    const results = [];
+    const queue = [...urls];
+    let activeWorkers = 0;
+    
+    const manageWorkers = () => {
+      if (queue.length === 0 && activeWorkers === 0) {
+        log(requestId, `✅ All WordPress posts processed. Final results: ${JSON.stringify(results)}`);
+        return;
+      }
+
+      while (activeWorkers < CONCURRENCY_LIMIT && queue.length > 0) {
+        activeWorkers++;
+        const url = queue.shift();
+        log(requestId, `⏳ Processing site: ${url}`);
+        
+        const worker = new Worker(workerPath, {
+          workerData: { loginUrl: `${url}/login`, newPostUrl: `${url}/new-post`, username, password, title, content }
+        });
+
+        worker.on('message', (message) => {
+          if (message.type === 'status') {
+            log(requestId, message.message);
+          } else if (message.type === 'result') {
+            if (message.success) {
+              log(requestId, `✅ Successfully posted to ${url}: ${message.postUrl}`);
+            } else {
+              log(requestId, `❌ Failed to post to ${url}: ${message.error}`);
+            }
+            results.push({ url, ...message });
+          }
+        });
+
+        worker.on('error', (error) => {
+          log(requestId, `❌ Worker error for ${url}: ${error.message}`);
+          results.push({ url, success: false, error: error.message });
+          activeWorkers--;
+          manageWorkers();
+        });
+
+        worker.on('exit', (code) => {
+          if (code !== 0) {
+            if (!results.some(r => r.url === url && r.error)) {
+                const errorMessage = `Worker for ${url} stopped with exit code ${code}`;
+                log(requestId, `❌ ${errorMessage}`);
+                results.push({ url, success: false, error: errorMessage });
+            }
+          }
+          activeWorkers--;
+          manageWorkers();
+        });
       }
     };
 
-    const CONCURRENCY_LIMIT = 2;
-    const queue = [...urls];
-    const results = [];
-
-    const workers = Array(CONCURRENCY_LIMIT).fill(null).map(async () => {
-        while (queue.length > 0) {
-            const url = queue.shift();
-            if (url) {
-                const result = await processSingleUrl(url);
-                results.push(result);
-            }
-        }
-    });
-    
     try {
-      await Promise.all(workers);
-      res.status(200).json({ results });
-    } catch(error) {
-       console.error('An unexpected error occurred while processing posts:', error);
-       res.status(500).json({ success: false, message: 'An unexpected error occurred while processing posts.' });
+      log(requestId, 'Initializing worker pool...');
+      manageWorkers();
+    } catch (error) {
+      log(requestId, `An unexpected error occurred in the main controller: ${error.message}`);
     }
-  }; 
+  };
+
+  runInBackground();
+}; 

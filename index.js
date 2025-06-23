@@ -1,5 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
+import { setupWebSocketServer } from './websocketLogger.js';
 import linkedinRoutes from './routes/linkedinRoutes.js';
 import publishRoutes from './routes/publishRoutes.js';
 import wpPostRoutes from './routes/wpPostRoutes.js';
@@ -13,7 +15,14 @@ dotenv.config();
 loadSessions(); // Load sessions from file on startup
 
 const app = express();
+const server = createServer(app); // Create an HTTP server
 const PORT = process.env.PORT || 3000;
+
+// Setup WebSocket server
+setupWebSocketServer(server);
+
+// Serve static files from the 'public' directory
+app.use(express.static('public'));
 
 app.use((req, res, next) => {
     const start = process.hrtime();
@@ -42,7 +51,7 @@ app.use('/api/delphi', delphiRoutes);
 // Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Swagger docs available at http://localhost:${PORT}/api-docs`);
 });

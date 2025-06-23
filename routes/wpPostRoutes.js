@@ -62,34 +62,26 @@ const router = express.Router();
  *                   "https://imblogs.net"
  *                 ]
  *     responses:
- *       '200':
- *         description: Successfully created the posts.
+ *       '202':
+ *         description: >
+ *           Request accepted for processing. The job will run in the background.
+ *           Use the `requestId` to connect to the WebSocket at `/` to view live logs.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 results:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       success:
- *                         type: boolean
- *                       postUrl:
- *                         type: string
- *                       loginUrl:
- *                         type: string
- *                       message:
- *                         type: string
- *                       error:
- *                         type: string
- *                 responseTime_seconds:
- *                   type: number
+ *                 message:
+ *                   type: string
+ *                   example: Request accepted. Use the requestId to connect to the log stream.
+ *                 requestId:
+ *                   type: string
+ *                   format: uuid
+ *                   example: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
  *       '400':
  *         description: Missing required fields.
  *       '500':
- *         description: An unexpected error occurred while processing posts.
+ *         description: An unexpected error occurred while queueing the job.
  */
 router.post('/posts', createPost);
 
