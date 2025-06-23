@@ -18,11 +18,14 @@ const router = express.Router();
  * @swagger
  * components:
  *   securitySchemes:
- *     SessionIdAuth:
+ *     SessionID:
  *       type: apiKey
  *       in: header
  *       name: X-Session-ID
- *       description: Session ID obtained after successful authentication via the `/auth/callback` endpoint.
+ *       description: Session ID obtained after successful authentication via the /auth/callback endpoint.
+ *
+ * security:
+ *   - SessionID: []
  */
 
 // --- Swagger Tags ---
@@ -40,7 +43,7 @@ const router = express.Router();
 // --- Authentication Routes ---
 /**
  * @swagger
- * /auth:
+ * /api/linkedin/auth:
  *   get:
  *     summary: 1. Redirect to LinkedIn for authentication
  *     tags: [Authentication]
@@ -53,7 +56,7 @@ router.get('/auth', redirectToAuth);
 
 /**
  * @swagger
- * /auth/callback:
+ * /api/linkedin/auth/callback:
  *   get:
  *     summary: 2. Handle LinkedIn OAuth callback
  *     tags: [Authentication]
@@ -97,18 +100,12 @@ router.get('/auth/callback', handleCallback);
 // --- Post Routes ---
 /**
  * @swagger
- * /posts:
+ * /api/linkedin/posts:
  *   post:
  *     summary: Create a new LinkedIn post
  *     tags: [Posts]
  *     security:
- *       - SessionIdAuth: []
- *     parameters:
- *       - in: header
- *         name: X-Session-ID
- *         required: true
- *         schema: { type: string }
- *         description: The session ID obtained after authentication.
+ *       - SessionID: []
  *     requestBody:
  *       required: true
  *       content:
@@ -150,21 +147,19 @@ router.post('/posts', handleCreatePost);
 
 /**
  * @swagger
- * /posts/{postId}:
+ * /api/linkedin/posts/{postId}:
  *   get:
  *     summary: Get a specific LinkedIn post
  *     tags: [Posts]
  *     security:
- *       - SessionIdAuth: []
+ *       - SessionID: []
  *     parameters:
- *       - in: header
- *         name: X-Session-ID
- *         required: true
- *         schema: { type: string }
  *       - in: path
  *         name: postId
  *         required: true
- *         schema: { type: string }
+ *         schema:
+ *           type: string
+ *         description: The ID of the post to get details for.
  *     responses:
  *       200:
  *         description: The requested post details.
@@ -175,24 +170,22 @@ router.get('/posts/:postId', handleGetPost);
 
 /**
  * @swagger
- * /posts/{postId}:
+ * /api/linkedin/posts/{postId}:
  *   delete:
  *     summary: Delete a specific LinkedIn post
  *     tags: [Posts]
  *     security:
- *       - SessionIdAuth: []
+ *       - SessionID: []
  *     parameters:
- *       - in: header
- *         name: X-Session-ID
- *         required: true
- *         schema: { type: string }
  *       - in: path
  *         name: postId
  *         required: true
- *         schema: { type: string }
+ *         schema:
+ *           type: string
+ *         description: The ID of the post to delete.
  *     responses:
- *       200:
- *         description: Post deleted successfully.
+ *       204:
+ *         description: Successfully deleted the post.
  *       401:
  *         description: Unauthorized.
  */
@@ -200,21 +193,19 @@ router.delete('/posts/:postId', handleDeletePost);
 
 /**
  * @swagger
- * /posts/{postId}:
+ * /api/linkedin/posts/{postId}:
  *   patch:
  *     summary: Update an existing LinkedIn post
  *     tags: [Posts]
  *     security:
- *       - SessionIdAuth: []
+ *       - SessionID: []
  *     parameters:
- *       - in: header
- *         name: X-Session-ID
- *         required: true
- *         schema: { type: string }
  *       - in: path
  *         name: postId
  *         required: true
- *         schema: { type: string }
+ *         schema:
+ *           type: string
+ *         description: The ID of the post to update.
  *     requestBody:
  *       required: true
  *       content:
@@ -236,23 +227,19 @@ router.patch('/posts/:postId', handleUpdatePost);
 // --- Comment Routes ---
 /**
  * @swagger
- * /posts/{postId}/comments:
+ * /api/linkedin/posts/{postId}/comments:
  *   post:
- *     summary: Add a comment to a LinkedIn post
+ *     summary: Create a comment on a LinkedIn post
  *     tags: [Comments]
  *     security:
- *       - SessionIdAuth: []
+ *       - SessionID: []
  *     parameters:
- *       - in: header
- *         name: X-Session-ID
- *         required: true
- *         schema: { type: string }
- *         description: The session ID obtained after authentication.
  *       - in: path
  *         name: postId
  *         required: true
- *         schema: { type: string }
- *         description: The ID of the post to comment on.
+ *         schema:
+ *           type: string
+ *         description: The ID of the post to add a comment to.
  *     requestBody:
  *       required: true
  *       content:
@@ -275,23 +262,19 @@ router.post('/posts/:postId/comments', handleCreateComment);
 
 /**
  * @swagger
- * /posts/{postId}/comments:
+ * /api/linkedin/posts/{postId}/comments:
  *   get:
- *     summary: Get all comments for a post
+ *     summary: Get all comments for a LinkedIn post
  *     tags: [Comments]
  *     security:
- *       - SessionIdAuth: []
+ *       - SessionID: []
  *     parameters:
- *       - in: header
- *         name: X-Session-ID
- *         required: true
- *         schema: { type: string }
- *         description: The session ID obtained after authentication.
  *       - in: path
  *         name: postId
  *         required: true
- *         schema: { type: string }
- *         description: The ID of the post to retrieve comments from.
+ *         schema:
+ *           type: string
+ *         description: The ID of the post to get comments for.
  *     responses:
  *       200:
  *         description: A list of comments for the specified post.
@@ -302,22 +285,18 @@ router.get('/posts/:postId/comments', handleGetComments);
 
 /**
  * @swagger
- * /comments/{commentId}:
+ * /api/linkedin/comments/{commentId}:
  *   delete:
  *     summary: Delete a specific comment
  *     tags: [Comments]
  *     security:
- *       - SessionIdAuth: []
+ *       - SessionID: []
  *     parameters:
- *       - in: header
- *         name: X-Session-ID
- *         required: true
- *         schema: { type: string }
- *         description: The session ID obtained after authentication.
  *       - in: path
  *         name: commentId
  *         required: true
- *         schema: { type: string }
+ *         schema:
+ *           type: string
  *         description: The ID of the comment to delete. Note that this is the URN of the comment (e.g., urn:li:comment:(urn:li:ugcPost:...,6...)).
  *     responses:
  *       200:

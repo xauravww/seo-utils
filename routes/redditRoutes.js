@@ -5,7 +5,7 @@ const router = Router();
 
 /**
  * @swagger
- * /reddit/publish:
+ * /api/reddit/publish:
  *   post:
  *     summary: Create a new Reddit post
  *     tags: [Reddit]

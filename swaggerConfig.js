@@ -14,23 +14,20 @@ const swaggerDefinition = {
   },
   servers: [
     {
-      url: `http://localhost:${process.env.PORT || 3000}/api`,
+      url: `http://localhost:${process.env.PORT || 3000}`,
       description: 'Development server',
     },
   ],
   components: {
     securitySchemes: {
-      sessionId: {
+      SessionID: {
         type: 'apiKey',
-        in: 'body',
-        name: 'sessionId',
-        description: 'Session ID obtained after successful authentication. Include this in the body of requests to protected endpoints.'
+        in: 'header',
+        name: 'X-Session-ID',
+        description: 'Session ID obtained after successful authentication via the /auth/callback endpoint. Include this in the header of requests to protected endpoints.'
       }
     }
   },
-  security: [{
-    sessionId: []
-  }],
   tags: [
     {
       name: 'Authentication',
@@ -45,8 +42,20 @@ const swaggerDefinition = {
       description: 'API for managing comments on LinkedIn posts.',
     },
     {
+      name: 'WordPress',
+      description: 'API for posting to WordPress sites.',
+    },
+    {
       name: 'Reddit',
       description: 'API for posting to Reddit.',
+    },
+    {
+      name: 'Delphi Forums',
+      description: 'API for posting to Delphi Forums.',
+    },
+    {
+      name: 'Bloglovin',
+      description: 'API for posting to Bloglovin.',
     }
   ]
 };
