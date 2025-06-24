@@ -7,6 +7,7 @@ import publishRoutes from './routes/publishRoutes.js';
 import wpPostRoutes from './routes/wpPostRoutes.js';
 import redditRoutes from './routes/redditRoutes.js';
 import delphiRoutes from './routes/delphiRoutes.js';
+import cityDataRoutes from './routes/cityDataRoutes.js';
 import { loadSessions } from './sessionStore.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swaggerConfig.js';
@@ -46,6 +47,7 @@ app.use('/api/bloglovin', publishRoutes);
 app.use('/api/wordpress', wpPostRoutes);
 app.use('/api/reddit', redditRoutes);
 app.use('/api/delphi', delphiRoutes);
+app.use('/api/city-data', cityDataRoutes);
 
 
 // Swagger UI

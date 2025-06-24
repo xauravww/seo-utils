@@ -54,6 +54,10 @@ const swaggerDefinition = {
       description: 'API for posting to Delphi Forums.',
     },
     {
+      name: 'City-Data Forums',
+      description: 'API for posting to City-Data Forums.',
+    },
+    {
       name: 'Bloglovin',
       description: 'API for posting to Bloglovin.',
     }
