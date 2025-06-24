@@ -16,7 +16,7 @@ const loginAndExtract = async () => {
     let browser;
     sendStatus(`[Worker] Launching browser for login at ${loginUrl}`);
     try {
-        browser = await chromium.launch({ headless: false });
+        browser = await chromium.launch({ headless: true });
         const context = await browser.newContext({ ignoreHTTPSErrors: true });
         const page = await context.newPage();
         page.setDefaultTimeout(60000);

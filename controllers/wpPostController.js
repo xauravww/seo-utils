@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const CONCURRENCY_LIMIT = 2;
 
 const loginAndExtract = async (loginUrl, newPostUrl, username, password) => {
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const page = await context.newPage();
 

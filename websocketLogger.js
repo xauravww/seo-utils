@@ -28,6 +28,10 @@ export function setupWebSocketServer(server) {
       }
     });
 
+    ws.on("error", (error) => {
+      console.error("WebSocket error:", error);
+    });
+
     ws.on('close', () => {
       // When a client disconnects, remove them from the map to clean up.
       if (ws.requestId) {

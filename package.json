@@ -9,14 +9,18 @@
     "dev": "nodemon"
   },
   "dependencies": {
+    "@google-cloud/speech": "^7.1.0",
     "axios": "^1.9.0",
     "axios-cookiejar-support": "^6.0.2",
     "body-parser": "^2.2.0",
     "cheerio": "^1.1.0",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
+    "fluent-ffmpeg": "^2.1.3",
     "node-reddit-js": "^0.0.11",
     "playright": "^0.0.22",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "qs": "^6.14.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",

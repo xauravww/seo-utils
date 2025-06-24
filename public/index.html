@@ -3,170 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live API Logs</title>
+    <title>WordPress Post Submitter</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f4f7f9; color: #333; }
-        header { background-color: #fff; padding: 1.5rem 2rem; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; }
-        h1 { margin: 0; font-size: 1.5rem; color: #1a1a1a; }
-        #status { font-weight: 500; padding: 0.4rem 0.8rem; border-radius: 99px; }
-        #status.connected { background-color: #e7f7ef; color: #28a745; }
-        #status.disconnected { background-color: #fdeaea; color: #dc3545; }
-        main { padding: 2rem; }
-        .form-container { background-color: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 2rem; }
-        .form-container h2 { margin-top: 0; }
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-        .form-field { display: flex; flex-direction: column; }
-        .form-field label { font-weight: 500; margin-bottom: 0.5rem; }
-        .form-field input, .form-field textarea { border: 1px solid #ccc; padding: 0.8rem; border-radius: 6px; font-size: 1rem; }
-        .form-field textarea { resize: vertical; min-height: 100px; }
-        .full-width { grid-column: 1 / -1; }
-        #log-container {
-            background-color: #2b2b2b;
-            color: #f1f1f1;
-            border: 1px solid #444;
-            border-radius: 8px;
-            padding: 1.5rem;
-            height: 60vh;
-            overflow-y: auto;
-            font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", monospace;
-            font-size: 0.9rem;
-            line-height: 1.6;
-        }
-        .log-entry { display: block; margin-bottom: 0.5rem; }
-        .log-timestamp { color: #888; margin-right: 1rem; }
-        .log-message { white-space: pre-wrap; word-break: break-all; }
-        .log-message-info { color: #80bfff; }
-        .log-message-log { color: #f1f1f1; }
-        button {
-            background-color: #007bff; color: white; border: none; padding: 0.8rem 1.2rem;
-            border-radius: 6px; font-size: 1rem; cursor: pointer; transition: background-color 0.2s;
-            justify-self: end;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 20px auto; padding: 0 20px; background-color: #f7f7f7; }
+        h1, h2 { color: #111; }
+        form { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        label { display: block; margin-bottom: 8px; font-weight: 600; }
+        input[type="text"], input[type="password"], textarea { width: 100%; padding: 8px; margin-bottom: 16px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        textarea { height: 150px; resize: vertical; }
+        button { background-color: #007BFF; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
         button:hover { background-color: #0056b3; }
+        #logs-container { margin-top: 20px; background: #282c34; color: #abb2bf; padding: 20px; border-radius: 8px; white-space: pre-wrap; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; font-size: 14px; line-height: 1.4; max-height: 400px; overflow-y: auto; }
+        .log-entry { padding: 2px 0; border-bottom: 1px solid #3e4451; }
+        .log-entry:last-child { border-bottom: none; }
+        .log-message { color: #61afef; }
+        .log-error { color: #e06c75; }
+        .log-success { color: #98c379; }
+        .log-info { color: #d19a66; }
     </style>
 </head>
 <body>
-    <header>
-        <h1>Live API Logs</h1>
-        <div id="status" class="disconnected">Disconnected</div>
-    </header>
-    <main>
-        <div class="form-container">
-            <h2>Start WordPress Job</h2>
-            <form id="wp-form" class="form-grid">
-                <div class="form-field">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="username" value="easyseo" required>
-                </div>
-                <div class="form-field">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" value="easyseo@gmail.com" required>
-                </div>
-                <div class="form-field full-width">
-                    <label for="title">Post Title</label>
-                    <input type="text" id="title" name="title" value="My Awesome Post" required>
-                </div>
-                <div class="form-field full-width">
-                    <label for="content">Post Content</label>
-                    <textarea id="content" name="content" required>This is the content of my awesome post created via the API!</textarea>
-                </div>
-                <div class="form-field full-width">
-                    <label for="urls">WordPress Site URLs (one per line)</label>
-                    <textarea id="urls" name="urls" required>https://blog2learn.com&#10;https://shotblogs.com</textarea>
-                </div>
-                 <button type="submit">Start Job & Watch Logs</button>
-            </form>
-        </div>
-        <div id="log-container"></div>
-    </main>
+    <h1>WordPress Post Submitter</h1>
+    <form id="post-form">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required value="easyseo">
+
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required value="easyseo@gmail.com">
+        
+        <label for="title">Post Title:</label>
+        <input type="text" id="title" name="title" required value="My Awesome Post">
+
+        <label for="content">Post Content:</label>
+        <textarea id="content" name="content" required>This is some great content for the post.</textarea>
+
+        <label for="urls">Site URLs (one per line):</label>
+        <textarea id="urls" name="urls" required>https://blog2learn.com
+https://shotblogs.com</textarea>
+
+        <button type="submit">Submit Posts</button>
+    </form>
+
+    <h2>Live Logs</h2>
+    <div id="logs-container">
+        <div class="log-entry">Waiting for submission...</div>
+    </div>
 
     <script>
-        const logContainer = document.getElementById('log-container');
-        const statusDiv = document.getElementById('status');
-        const form = document.getElementById('wp-form');
-        let socket;
-
-        function connect(requestId) {
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.close();
-            }
-
-            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            const host = window.location.host;
-            socket = new WebSocket(`${protocol}://${host}`);
-
-            socket.onopen = () => {
-                statusDiv.textContent = 'Connected';
-                statusDiv.className = 'connected';
-                // Subscribe to the specific log stream
-                socket.send(JSON.stringify({ type: 'subscribe', requestId }));
-            };
-
-            socket.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                const { type, message, timestamp } = data;
-                
-                const entry = document.createElement('div');
-                entry.className = 'log-entry';
-                
-                const timeEl = document.createElement('span');
-                timeEl.className = 'log-timestamp';
-                timeEl.textContent = `[${new Date(timestamp).toLocaleTimeString()}]`;
-
-                const msgEl = document.createElement('span');
-                msgEl.className = `log-message log-message-${type}`;
-                msgEl.textContent = message;
-                
-                entry.appendChild(timeEl);
-                entry.appendChild(msgEl);
-                
-                logContainer.appendChild(entry);
-                logContainer.scrollTop = logContainer.scrollHeight;
-            };
-
-            socket.onclose = () => {
-                statusDiv.textContent = 'Disconnected';
-                statusDiv.className = 'disconnected';
-            };
-
-            socket.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                logContainer.innerHTML += `<div class="log-entry"><span class="log-message log-message-error">WebSocket connection error. See console for details.</span></div>`;
-                socket.close();
-            };
-        }
-
-        form.addEventListener('submit', async (e) => {
+        document.getElementById('post-form').addEventListener('submit', async function (e) {
             e.preventDefault();
-            logContainer.innerHTML = ''; // Clear logs on new job start
 
-            const formData = new FormData(form);
+            const logsContainer = document.getElementById('logs-container');
+            logsContainer.innerHTML = '<div class="log-entry log-info">🚀 Initializing request...</div>';
+
+            const formData = new FormData(e.target);
             const data = Object.fromEntries(formData.entries());
             data.urls = data.urls.split('\\n').map(url => url.trim()).filter(url => url);
 
             try {
+                // Step 1: Make the POST request
                 const response = await fetch('/api/wordpress/posts', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
+                    body: JSON.stringify(data)
                 });
 
                 if (!response.ok) {
-                    const errorResult = await response.json();
-                    throw new Error(errorResult.error || `HTTP error! Status: ${response.status}`);
+                    const error = await response.json();
+                    throw new Error(`HTTP Error ${response.status}: ${error.error || 'Unknown error'}`);
                 }
 
                 const result = await response.json();
+                const { requestId } = result;
                 
-                if (result.requestId) {
-                    connect(result.requestId);
-                } else {
-                     throw new Error('Did not receive a requestId from the server.');
-                }
+                logsContainer.innerHTML += `<div class="log-entry log-info">📬 Request accepted with ID: ${requestId}. Connecting to log stream...</div>`;
+
+                // Step 2: Connect to the WebSocket
+                const socket = new WebSocket(`ws://${window.location.host}`);
+
+                socket.onopen = () => {
+                    // Step 3: Subscribe to the log channel
+                    socket.send(JSON.stringify({
+                        type: 'subscribe',
+                        requestId: requestId
+                    }));
+                };
+
+                socket.onmessage = (event) => {
+                    const logData = JSON.parse(event.data);
+                    const logEntry = document.createElement('div');
+                    logEntry.className = 'log-entry';
+                    
+                    let messageClass = 'log-message';
+                    if (logData.message && logData.message.includes('❌')) {
+                        messageClass = 'log-error';
+                    } else if (logData.message && logData.message.includes('✅')) {
+                        messageClass = 'log-success';
+                    } else if (logData.type === 'info') {
+                        messageClass = 'log-info';
+                    }
+
+                    const timestamp = logData.timestamp ? new Date(logData.timestamp).toLocaleTimeString() : '';
+                    logEntry.innerHTML = `<span>[${timestamp}]</span> <span class="${messageClass}">${logData.message}</span>`;
+                    logsContainer.appendChild(logEntry);
+                    logsContainer.scrollTop = logsContainer.scrollHeight; // Auto-scroll
+                };
+
+                socket.onclose = () => {
+                    logsContainer.innerHTML += '<div class="log-entry log-info">🔌 WebSocket connection closed.</div>';
+                };
+
+                socket.onerror = (error) => {
+                    console.error('WebSocket Error:', error);
+                    logsContainer.innerHTML += `<div class="log-entry log-error">🔌 WebSocket error. See browser console for details.</div>`;
+                };
 
             } catch (error) {
-                console.error('Failed to start job:', error);
-                logContainer.innerHTML = `<div class="log-entry"><span class="log-message log-message-error">Failed to start job: ${error.message}</span></div>`;
+                logsContainer.innerHTML += `<div class="log-entry log-error">Failed to submit request: ${error.message}</div>`;
             }
         });
     </script>

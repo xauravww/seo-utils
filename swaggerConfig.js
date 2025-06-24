@@ -58,6 +58,10 @@ const swaggerDefinition = {
       description: 'API for posting to City-Data Forums.',
     },
     {
+      name: 'Simple Machines Forums',
+      description: 'API for posting to Simple Machines Forums.',
+    },
+    {
       name: 'Bloglovin',
       description: 'API for posting to Bloglovin.',
     }
