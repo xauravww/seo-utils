@@ -82,7 +82,7 @@ export const postToSimpleMachines = async (req, res) => {
     let browser;
     try {
         console.log('[EVENT] Launching browser...');
-        browser = await chromium.launch({ headless: true });
+        browser = await chromium.launch({ headless: false });
         const context = await browser.newContext();
         const page = await context.newPage();
 
@@ -104,30 +104,33 @@ export const postToSimpleMachines = async (req, res) => {
         console.log('[EVENT] Submitting login...');
         await loginPopup.locator('input[type="submit"][value="Log in"]').click();
         
-        await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 });
+        await loginPopup.waitFor({ state: 'detached', timeout: 60000 });
         console.log('[SUCCESS] Login successful.');
 
         console.log('[EVENT] Navigating to the board...');
         await page.goto('https://www.simplemachines.org/community/index.php?board=7.0', { waitUntil: 'domcontentloaded' });
 
         console.log('[EVENT] Clicking "New Topic"...');
+        const navigationPromise = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 });
         await page.getByRole('link', { name: 'New topic' }).first().click();
-        await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 });
+        await navigationPromise;
 
         console.log('[EVENT] Filling subject...');
         await page.locator('#subject').fill(subject);
 
         console.log('[EVENT] Filling body...');
-        await page.locator('textarea[name="message"]').fill(body);
+        const editorFrame = page.frameLocator('.sceditor-container iframe');
+        await editorFrame.locator('body').fill(body);
 
         await solveRecaptcha(page);
 
         console.log('[EVENT] Submitting post...');
+        const postNavigationPromise = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 });
         await page.locator('input[name="post"][value="Post"]').click();
-        await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 });
+        await postNavigationPromise;
 
         console.log('[EVENT] Extracting final URL...');
-        const topicLinkLocator = page.locator(`.windowbg .message_index_title a`).first();
+        const topicLinkLocator = page.locator(`.windowbg .message_index_title a[href*="topic=${subject.replace(/ /g, '.')}"]`).first();
         const finalUrl = await topicLinkLocator.getAttribute('href');
         
         console.log('[SUCCESS] Post created successfully. Final URL:', finalUrl);

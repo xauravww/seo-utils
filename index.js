@@ -9,6 +9,7 @@ import redditRoutes from './routes/redditRoutes.js';
 import delphiRoutes from './routes/delphiRoutes.js';
 import cityDataRoutes from './routes/cityDataRoutes.js';
 import simpleMachinesRoutes from './routes/simpleMachinesRoutes.js';
+import gentooRoutes from './routes/gentooRoutes.js';
 import { loadSessions } from './sessionStore.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swaggerConfig.js';
@@ -50,6 +51,7 @@ app.use('/api/reddit', redditRoutes);
 app.use('/api/delphi', delphiRoutes);
 app.use('/api/city-data', cityDataRoutes);
 app.use('/api/simple-machines', simpleMachinesRoutes);
+app.use('/api', gentooRoutes);
 
 
 // Swagger UI

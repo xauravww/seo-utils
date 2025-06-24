@@ -62,6 +62,10 @@ const swaggerDefinition = {
       description: 'API for posting to Simple Machines Forums.',
     },
     {
+      name: 'Gentoo Forums',
+      description: 'API for posting to Gentoo Forums.',
+    },
+    {
       name: 'Bloglovin',
       description: 'API for posting to Bloglovin.',
     }
