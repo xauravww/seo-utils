@@ -105,21 +105,40 @@
                 };
 
                 socket.onmessage = (event) => {
-                    const message = event.data;
-                    const logEntry = document.createElement('div');
-                    logEntry.className = 'log-entry';
-                    logEntry.textContent = message;
+                    try {
+                        const logData = JSON.parse(event.data);
+                        const message = logData.message || event.data; // Fallback to raw data if parsing fails
 
-                    if (message.includes('❌') || message.includes('error')) logEntry.classList.add('log-error');
-                    else if (message.includes('✅') || message.includes('success')) logEntry.classList.add('log-success');
-                    else if (message.includes('⚠️')) logEntry.classList.add('log-warning');
-                    else if (message.includes('ℹ️') || message.includes('🚀')) logEntry.classList.add('log-info');
-                    
-                    logsContainer.appendChild(logEntry);
-                    logsContainer.scrollTop = logsContainer.scrollHeight;
+                        const logEntry = document.createElement('div');
+                        logEntry.className = 'log-entry';
+                        
+                        // Clean up the message from worker logs
+                        const cleanMessage = message.replace(/\\n/g, '').replace(/\[[a-f0-9\\-]+\]/g, '').trim();
+                        logEntry.textContent = `[${new Date(logData.timestamp || Date.now()).toLocaleTimeString()}] ${cleanMessage}`;
+                        
+                        if (logData.type === 'error' || cleanMessage.includes('❌') || cleanMessage.includes('failed')) {
+                            logEntry.classList.add('log-error');
+                        } else if (logData.type === 'success' || cleanMessage.includes('✅') || cleanMessage.includes('Successfully extracted post URL')) {
+                            logEntry.classList.add('log-success');
+                        } else if (logData.type === 'warning') {
+                            logEntry.classList.add('log-warning');
+                        } else if (logData.type === 'info') {
+                            logEntry.classList.add('log-info');
+                        }
+                        
+                        logsContainer.appendChild(logEntry);
+                        logsContainer.scrollTop = logsContainer.scrollHeight;
+                    } catch (e) {
+                        // If it's not a JSON object, just display the raw text.
+                        const logEntry = document.createElement('div');
+                        logEntry.className = 'log-entry';
+                        logEntry.textContent = event.data;
+                        logsContainer.appendChild(logEntry);
+                        logsContainer.scrollTop = logsContainer.scrollHeight;
+                    }
                 };
 
-                socket.onclose = () => { logsContainer.innerHTML += '<div class="log-entry log-info">🔌 WebSocket connection closed.</div>'; };
+                socket.onclose = () => { logsContainer.innerHTML += `<div class="log-entry log-info">[${new Date().toLocaleTimeString()}] 🔌 WebSocket connection closed.</div>`; };
                 socket.onerror = (error) => {
                     console.error('WebSocket Error:', error);
                     logsContainer.innerHTML += `<div class="log-entry log-error">🔌 WebSocket error. See console.</div>`;
