@@ -43,6 +43,9 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
+// Add the new publish route
+app.use('/api/publish', publishRoutes);
+
 // Modular and specific route mounting
 app.use('/api/linkedin', linkedinRoutes);
 app.use('/api/bloglovin', publishRoutes);

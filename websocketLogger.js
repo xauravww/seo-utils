@@ -46,11 +46,34 @@ export function setupWebSocketServer(server) {
   console.log('WebSocket server is set up for request-specific logging.');
 }
 
-// The log function now takes a requestId to send the message to the correct client.
-export function log(requestId, message) {
+// Log levels can be 'info', 'success', 'error', 'warning', or 'detail'
+const logPrefix = {
+    info: 'ℹ️',
+    success: '✅',
+    error: '❌',
+    warning: '⚠️',
+    detail: '    ' // Indent for detailed steps
+};
+
+/**
+ * Sends a log message to the correct client based on the request ID.
+ * The message is formatted into a readable string.
+ *
+ * @param {string} requestId - The unique identifier for the request/client.
+ * @param {string} message - The log message content.
+ * @param {'info'|'success'|'error'|'warning'|'detail'} [level='info'] - The log level, which determines the icon.
+ */
+export function log(requestId, data) {
   const client = clientMap.get(requestId);
+
   if (client && client.readyState === client.OPEN) {
-    const formattedMessage = JSON.stringify({ type: 'log', message, timestamp: new Date().toISOString() });
-    client.send(formattedMessage);
+    const payload = typeof data === 'object' && data !== null && !Array.isArray(data)
+      ? { type: 'log', timestamp: new Date().toISOString(), ...data }
+      : { type: 'log', timestamp: new Date().toISOString(), message: data };
+
+    const logMessageForConsole = typeof payload.message === 'string' ? payload.message : JSON.stringify(data);
+    console.log(`[${requestId}] ${logMessageForConsole}`); // Log to console as well
+    
+    client.send(JSON.stringify(payload));
   }
 } 

@@ -3,10 +3,10 @@ import swaggerJSDoc from 'swagger-jsdoc';
 const swaggerDefinition = {
   openapi: '3.0.0',
   info: {
-    title: 'LinkedIn Post API',
-    version: '1.0.0',
+    title: 'Unified Content Publishing API',
+    version: '1.1.0',
     description:
-      'This is a REST API application made with Express. It retrieves data from the LinkedIn API to allow creating, reading, and deleting posts and comments.',
+      'A REST API application for publishing content to multiple types of websites, including blogs, forums, and social media platforms, using a unified endpoint.',
     contact: {
       name: 'Your Name',
       email: 'your.email@example.com',
@@ -29,6 +29,10 @@ const swaggerDefinition = {
     }
   },
   tags: [
+    {
+      name: 'Publishing',
+      description: 'The unified endpoint for submitting content to multiple sites.',
+    },
     {
       name: 'Authentication',
       description: 'Handles OAuth 2.0 flow with LinkedIn.',

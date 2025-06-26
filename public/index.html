@@ -3,45 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WordPress Post Submitter</title>
+    <title>Unified Post Submitter</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 20px auto; padding: 0 20px; background-color: #f7f7f7; }
         h1, h2 { color: #111; }
         form { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         label { display: block; margin-bottom: 8px; font-weight: 600; }
-        input[type="text"], input[type="password"], textarea { width: 100%; padding: 8px; margin-bottom: 16px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        textarea { height: 150px; resize: vertical; }
+        input[type="text"], textarea { width: 100%; padding: 8px; margin-bottom: 16px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        textarea { height: 200px; resize: vertical; }
         button { background-color: #007BFF; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
         button:hover { background-color: #0056b3; }
-        #logs-container { margin-top: 20px; background: #282c34; color: #abb2bf; padding: 20px; border-radius: 8px; white-space: pre-wrap; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; font-size: 14px; line-height: 1.4; max-height: 400px; overflow-y: auto; }
-        .log-entry { padding: 2px 0; border-bottom: 1px solid #3e4451; }
-        .log-entry:last-child { border-bottom: none; }
-        .log-message { color: #61afef; }
+        #logs-container { margin-top: 20px; background: #282c34; color: #abb2bf; padding: 20px; border-radius: 8px; white-space: pre-wrap; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace; font-size: 14px; line-height: 1.4; max-height: 500px; overflow-y: auto; }
+        .log-entry { padding: 4px 0; }
         .log-error { color: #e06c75; }
         .log-success { color: #98c379; }
-        .log-info { color: #d19a66; }
+        .log-info { color: #61afef; }
+        .log-warning { color: #d19a66; }
+        .format-info { font-size: 12px; color: #666; background-color: #eee; padding: 8px; border-radius: 4px; margin-bottom: 16px; }
     </style>
 </head>
 <body>
-    <h1>WordPress Post Submitter</h1>
+    <h1>Unified Post Submitter</h1>
+    <p>Submit content to multiple websites, each with its own credentials.</p>
     <form id="post-form">
-        <label for="username">Username:</label>
-        <input type="text" id="username" name="username" required value="easyseo">
-
-        <label for="password">Password:</label>
-        <input type="password" id="password" name="password" required value="easyseo@gmail.com">
-        
         <label for="title">Post Title:</label>
-        <input type="text" id="title" name="title" required value="My Awesome Post">
+        <input type="text" id="title" name="title" required value="My Per-Site Credential Post">
 
         <label for="content">Post Content:</label>
-        <textarea id="content" name="content" required>This is some great content for the post.</textarea>
+        <textarea id="content" name="content" required>This is content sent to multiple sites, each with a unique login.</textarea>
 
-        <label for="urls">Site URLs (one per line):</label>
-        <textarea id="urls" name="urls" required>https://blog2learn.com
-https://shotblogs.com</textarea>
-
-        <button type="submit">Submit Posts</button>
+        <label for="websites">Website Details (one per line):</label>
+        <div class="format-info">Format: <code>URL,category,username,password</code><br>Example: <code>https://blog2learn.com,blog,easyseo,easyseo@gmail.com</code></div>
+        <textarea id="websites" name="websites" required>https://blog2learn.com,blog,easyseo,easyseo@gmail.com</textarea>
+        
+        <button type="submit">Submit to All</button>
     </form>
 
     <h2>Live Logs</h2>
@@ -57,20 +52,42 @@ https://shotblogs.com</textarea>
             logsContainer.innerHTML = '<div class="log-entry log-info">🚀 Initializing request...</div>';
 
             const formData = new FormData(e.target);
-            const data = Object.fromEntries(formData.entries());
-            data.urls = data.urls.split('\\n').map(url => url.trim()).filter(url => url);
+            const rawData = Object.fromEntries(formData.entries());
+            
+            // Structure the data for the /api/publish endpoint
+            const websiteLines = rawData.websites.split('\\n').map(line => line.trim()).filter(line => line);
+            
+            const websites = websiteLines.map(line => {
+                const [url, category, username, password] = line.split(',');
+                return { 
+                    url: url.trim(), 
+                    category: category.trim(), 
+                    credentials: { 
+                        username: username.trim(), 
+                        password: password.trim() 
+                    } 
+                };
+            });
+
+            const payload = {
+                websites: websites,
+                content: {
+                    title: rawData.title,
+                    body: rawData.content
+                }
+            };
 
             try {
                 // Step 1: Make the POST request
-                const response = await fetch('/api/wordpress/posts', {
+                const response = await fetch('/api/publish', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
+                    body: JSON.stringify(payload)
                 });
 
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(`HTTP Error ${response.status}: ${error.error || 'Unknown error'}`);
+                    throw new Error(`HTTP Error ${response.status}: ${error.message || 'Unknown error'}`);
                 }
 
                 const result = await response.json();
@@ -78,11 +95,9 @@ https://shotblogs.com</textarea>
                 
                 logsContainer.innerHTML += `<div class="log-entry log-info">📬 Request accepted with ID: ${requestId}. Connecting to log stream...</div>`;
 
-                // Step 2: Connect to the WebSocket
                 const socket = new WebSocket(`ws://${window.location.host}`);
 
                 socket.onopen = () => {
-                    // Step 3: Subscribe to the log channel
                     socket.send(JSON.stringify({
                         type: 'subscribe',
                         requestId: requestId
@@ -90,32 +105,24 @@ https://shotblogs.com</textarea>
                 };
 
                 socket.onmessage = (event) => {
-                    const logData = JSON.parse(event.data);
+                    const message = event.data;
                     const logEntry = document.createElement('div');
                     logEntry.className = 'log-entry';
+                    logEntry.textContent = message;
+
+                    if (message.includes('❌') || message.includes('error')) logEntry.classList.add('log-error');
+                    else if (message.includes('✅') || message.includes('success')) logEntry.classList.add('log-success');
+                    else if (message.includes('⚠️')) logEntry.classList.add('log-warning');
+                    else if (message.includes('ℹ️') || message.includes('🚀')) logEntry.classList.add('log-info');
                     
-                    let messageClass = 'log-message';
-                    if (logData.message && logData.message.includes('❌')) {
-                        messageClass = 'log-error';
-                    } else if (logData.message && logData.message.includes('✅')) {
-                        messageClass = 'log-success';
-                    } else if (logData.type === 'info') {
-                        messageClass = 'log-info';
-                    }
-
-                    const timestamp = logData.timestamp ? new Date(logData.timestamp).toLocaleTimeString() : '';
-                    logEntry.innerHTML = `<span>[${timestamp}]</span> <span class="${messageClass}">${logData.message}</span>`;
                     logsContainer.appendChild(logEntry);
-                    logsContainer.scrollTop = logsContainer.scrollHeight; // Auto-scroll
+                    logsContainer.scrollTop = logsContainer.scrollHeight;
                 };
 
-                socket.onclose = () => {
-                    logsContainer.innerHTML += '<div class="log-entry log-info">🔌 WebSocket connection closed.</div>';
-                };
-
+                socket.onclose = () => { logsContainer.innerHTML += '<div class="log-entry log-info">🔌 WebSocket connection closed.</div>'; };
                 socket.onerror = (error) => {
                     console.error('WebSocket Error:', error);
-                    logsContainer.innerHTML += `<div class="log-entry log-error">🔌 WebSocket error. See browser console for details.</div>`;
+                    logsContainer.innerHTML += `<div class="log-entry log-error">🔌 WebSocket error. See console.</div>`;
                 };
 
             } catch (error) {
