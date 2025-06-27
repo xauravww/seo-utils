@@ -89,6 +89,7 @@ const postWithAxios = async (newPostUrl, cookies, hiddenInputs, title, content, 
 };
 
 export const createPost = (req, res) => {
+  console.log("req.body in createPost ",req.body)
     const { title, content, username, password, urls } = req.body;
     const requestId = crypto.randomUUID();
     console.log(`[${requestId}] Received request to create post. URLs:`, urls);

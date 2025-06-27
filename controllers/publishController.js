@@ -13,18 +13,39 @@ const __dirname = path.dirname(__filename);
 export const publish = (req, res) => {
     // The 'credentials' object is no longer at the top level.
     // It's now part of each item in the 'websites' array.
-    const { websites, content } = req.body;
+    console.log("req.body in publish ", JSON.stringify(req.body));
+    const { websites: oldFormatWebsites, content: oldFormatContent, api_keys, title, content } = req.body;
     const requestId = uuidv4();
 
-    if (!websites || !Array.isArray(websites) || websites.length === 0) {
-        return res.status(400).json({ message: 'Please provide a list of websites.' });
+    let websites;
+    let workerContent;
+
+    if (api_keys) {
+        // Handle new format
+        websites = api_keys.map(key => ({
+            url: key.websiteUrl,
+            credentials: key.credentials,
+            category: 'blog' // Assuming 'blog' for now based on the new structure
+        }));
+        workerContent = { title, body: content };
+
+        if (!Array.isArray(websites) || websites.length === 0) {
+            return res.status(400).json({ message: 'Please provide a list of websites in api_keys.' });
+        }
+    } else {
+        // Handle old format
+        websites = oldFormatWebsites;
+        workerContent = oldFormatContent;
+
+        if (!websites || !Array.isArray(websites) || websites.length === 0) {
+            return res.status(400).json({ message: 'Please provide a list of websites.' });
+        }
     }
-    // TODO: Add more robust validation for the new structure.
 
     // Immediately respond to the client
-    res.status(202).json({ 
+    res.status(202).json({
         message: 'Request received. Processing will start shortly.',
-        requestId: requestId 
+        requestId: requestId
     });
 
     // --- Run the actual process in the background ---
@@ -35,7 +56,7 @@ export const publish = (req, res) => {
         const worker = new Worker(workerPath, {
           // Pass the whole websites array and content.
           // The worker will handle the per-site credentials.
-          workerData: { requestId, websites, content }
+          workerData: { requestId, websites, content: workerContent }
         });
 
         worker.on('message', (message) => {
@@ -74,4 +95,4 @@ export const publish = (req, res) => {
         websocketLogger.log(requestId, ` - ${site.url} (Category: ${site.category})`);
     });
     websocketLogger.log(requestId, 'Processing complete (simulation).');
-}; 
+};
