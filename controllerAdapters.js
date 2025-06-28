@@ -36,7 +36,7 @@ class WordPressAdapter extends BaseAdapter {
             browser = await chromium.launch({ headless: true });
             const context = await browser.newContext({ ignoreHTTPSErrors: true });
             const page = await context.newPage();
-            page.setDefaultTimeout(60000);
+            page.setDefaultTimeout(30000);
 
             // Construct the standard WordPress login URL and navigate there directly.
             const loginUrl = `${this.website.url.replace(/\/$/, '')}/login`;
@@ -95,25 +95,21 @@ class WordPressAdapter extends BaseAdapter {
         const postRes = await client.post(newPostUrl, body, {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         });
-        
         const $ = load(postRes.data);
-        // Add the user's recommended selectors to the list for robust URL detection.
-        const postUrl = $('#message a').attr('href') || 
-                        $('.updated a').attr('href') || 
-                        $('#sample-permalink a').attr('href') ||
-                        $('#successfully_posted_url a').attr('href') ||
-                        $('#published-url a').attr('href') ||
-                        $('.post-publish-panel__postpublish-post-address').attr('href');
+        // Extract post URL from response
+        let postUrl = $('#successfully_posted_url a').attr('href');
+        if (!postUrl) {
+          postUrl = $('#published-url a').attr('href');
+        }
 
         if (!postUrl) {
             this.log('Failed to find post URL in response. The page HTML will be logged for debugging.', 'error');
-            // Log a snippet of the response to help identify the correct selector.
-            const responseSnippet = postRes.data.substring(0, 3000); // Limit snippet size
-            this.log(`--- Start of Response HTML Snippet ---\n${responseSnippet}\n--- End of Response HTML Snippet ---`, 'detail');
             throw new Error('Could not find the final post URL in the response page. Check logs for HTML snippet.');
         }
         
-        this.log(`Successfully extracted post URL: ${postUrl}`, 'success');
+        const successMessage = `Successfully extracted post URL: ${postUrl}`;
+        this.log(successMessage, 'success');
+        console.log(`[${this.requestId}] [WordPressAdapter] ${successMessage}`);
         return postUrl;
     }
 
@@ -122,7 +118,9 @@ class WordPressAdapter extends BaseAdapter {
         try {
             const { cookies, hiddenInputs, newPostUrl } = await this.loginAndExtract();
             const postUrl = await this.postWithAxios(cookies, hiddenInputs, newPostUrl);
-            this.log(`Publication successful! URL: ${postUrl}`, 'success');
+            const successMessage = `Publication successful! URL: ${postUrl}`;
+            this.log(successMessage, 'success');
+            console.log(`[${this.requestId}] [WordPressAdapter] ${successMessage}`);
             return { success: true, postUrl };
         } catch (error) {
             this.log(`Publication failed: ${error.message}`, 'error');
