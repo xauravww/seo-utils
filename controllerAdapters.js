@@ -13,6 +13,7 @@ import fs from 'fs';
 import { getRedditAccessToken, submitRedditPost } from './controllers/redditController.js';
 import { sendTweet } from './controllers/social_media/twitterController.js';
 import { postToFacebook } from './controllers/social_media/facebookController.js';
+import { postToInstagram } from './controllers/social_media/instagramController.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -673,6 +674,40 @@ class FacebookAdapter extends BaseAdapter {
     }
 }
 
+// --- Instagram Adapter ---
+class InstagramAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+    }
+
+    async publish() {
+        this.log(`[EVENT] Entering InstagramAdapter publish method.`);
+        const { pageId, accessToken } = this.website.credentials;
+        const { imageUrl, caption } = this.content; // Assuming content will have imageUrl and caption
+
+        if (!pageId || !accessToken || !imageUrl || !caption) {
+            const errorMessage = 'Missing required Instagram credentials or content fields (pageId, accessToken, imageUrl, caption).';
+            this.log(`[ERROR] ${errorMessage}`, 'error');
+            return { success: false, error: errorMessage };
+        }
+
+        try {
+            this.log('[EVENT] Attempting to post to Instagram...');
+            const instagramPostResult = await postToInstagram({ pageId, accessToken }, { imageUrl, caption });
+            
+            if (instagramPostResult.success) {
+                this.log(`[SUCCESS] Instagram post created successfully! URL: ${instagramPostResult.postUrl}`, 'success');
+                return { success: true, postUrl: instagramPostResult.postUrl };
+            } else {
+                throw new Error(instagramPostResult.error);
+            }
+        } catch (error) {
+            this.log(`[ERROR] Instagram post failed: ${error.message}`, 'error');
+            return { success: false, error: error.message };
+        }
+    }
+}
+
 // --- Adapter Factory ---
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
@@ -682,6 +717,7 @@ const adapterMap = {
     '../controllers/redditController.js': RedditAdapter, // New adapter for Reddit
     '../controllers/social_media/twitterController.js': TwitterAdapter, // New adapter for Twitter
     '../controllers/social_media/facebookController.js': FacebookAdapter, // New adapter for Facebook
+    '../controllers/social_media/instagramController.js': InstagramAdapter, // New adapter for Instagram
     // Add other controllers here
 };
 
