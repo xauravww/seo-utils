@@ -25,6 +25,8 @@ const processWebsite = async (jobDetails) => {
                 console.log(`[${requestId}] [Worker] Adapter publish completed for ${url}.`);
                 if (publishResult.postUrl) {
                     console.log(`[${requestId}] [Worker] Posted URL: ${publishResult.postUrl}`);
+                } else if (publishResult.tweetUrl) {
+                    console.log(`[${requestId}] [Worker] Posted URL: ${publishResult.tweetUrl}`);
                 }
             } else {
                 console.error(`[${requestId}] [Worker] Adapter publish failed for ${url}: ${publishResult.error}`);

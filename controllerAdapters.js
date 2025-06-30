@@ -11,6 +11,7 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import cloudinary from 'cloudinary';
 import fs from 'fs';
 import { getRedditAccessToken, submitRedditPost } from './controllers/redditController.js';
+import { sendTweet } from './controllers/social_media/twitterController.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -603,6 +604,40 @@ class RedditAdapter extends BaseAdapter {
     }
 }
 
+// --- Twitter Adapter ---
+class TwitterAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+    }
+
+    async publish() {
+        this.log(`[EVENT] Entering TwitterAdapter publish method.`);
+        const { appKey, appSecret, accessToken, accessSecret } = this.website.credentials;
+        const tweetText = this.content.body; // Assuming the tweet content is in content.body
+
+        if (!appKey || !appSecret || !accessToken || !accessSecret || !tweetText) {
+            const errorMessage = 'Missing required Twitter credentials or tweet text.';
+            this.log(`[ERROR] ${errorMessage}`, 'error');
+            return { success: false, error: errorMessage };
+        }
+
+        try {
+            this.log('[EVENT] Attempting to send tweet...');
+            const tweetResult = await sendTweet({ appKey, appSecret, accessToken, accessSecret }, tweetText);
+            
+            if (tweetResult.success) {
+                this.log(`[SUCCESS] Tweet posted successfully! URL: ${tweetResult.tweetUrl}`, 'success');
+                return { success: true, tweetUrl: tweetResult.tweetUrl };
+            } else {
+                throw new Error(tweetResult.error);
+            }
+        } catch (error) {
+            this.log(`[ERROR] Twitter post failed: ${error.message}`, 'error');
+            return { success: false, error: error.message };
+        }
+    }
+}
+
 // --- Adapter Factory ---
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
@@ -610,6 +645,7 @@ const adapterMap = {
     '../controllers/search/secretSearchEngineLabsController.js': SecretSearchEngineLabsAdapter, // New adapter for Secret Search Engine Labs
     '../controllers/search/activeSearchResultsController.js': ActiveSearchResultsAdapter, // New adapter for Active Search Results
     '../controllers/redditController.js': RedditAdapter, // New adapter for Reddit
+    '../controllers/social_media/twitterController.js': TwitterAdapter, // New adapter for Twitter
     // Add other controllers here
 };
 
