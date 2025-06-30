@@ -21,7 +21,11 @@ const processWebsite = async (jobDetails) => {
         console.log(`[${requestId}] [Worker] Adapter found, executing publish for ${url}.`);
         try {
             const publishResult = await adapter.publish(); // Capture result from adapter
-            console.log(`[${requestId}] [Worker] Adapter publish completed for ${url}.`);
+            if (publishResult.success) {
+                console.log(`[${requestId}] [Worker] Adapter publish completed for ${url}.`);
+            } else {
+                console.error(`[${requestId}] [Worker] Adapter publish failed for ${url}: ${publishResult.error}`);
+            }
             return publishResult; // Return the result
         } catch (adapterError) {
             console.error(`[${requestId}] [Worker] Error during adapter publish for ${url}:`, adapterError);
@@ -43,9 +47,11 @@ const run = async () => {
     websocketLogger.log(requestId, `[Worker] Background worker started. Processing ${websites.length} websites.`, 'info');
 
     let allSuccess = true; // Track overall success
+    const results = []; // Array to store results from each adapter
     // To run in parallel, Promise.all could be used, but sequential is safer for now.
     for (const website of websites) {
         const result = await processWebsite({ requestId, website, content }); // Capture result
+        results.push(result); // Store the result
         if (!result || !result.success) { // If any website processing fails
             allSuccess = false;
         }
@@ -55,7 +61,7 @@ const run = async () => {
         websocketLogger.log(requestId, `[Worker] All jobs complete for request ${requestId}.`, 'success');
         console.log(`[${requestId}] [Worker] All jobs complete.`);
         if (parentPort) {
-            parentPort.postMessage({ status: 'done' });
+            parentPort.postMessage({ status: 'done', results: results }); // Send back all results
         } else {
             process.exit(0);
         }

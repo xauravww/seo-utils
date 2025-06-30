@@ -311,14 +311,268 @@ class PingMyLinksAdapter extends BaseAdapter {
     }
 }
 
+// --- SecretSearchEngineLabs Adapter ---
+class SecretSearchEngineLabsAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+        this.submissionUrl = 'http://www.secretsearchenginelabs.com/add-url.php';
+    }
 
-// --- Add other Adapters here (e.g., LinkedInAdapter) ---
+    async publish() {
+        this.log(`[EVENT] Entering SecretSearchEngineLabsAdapter publish method for ${this.website.url}.`);
 
+        let browser;
+        let context;
+        let page;
+
+        try {
+            this.log('[DEBUG] Attempting chromium.launch()...');
+            browser = await chromium.launch({ headless: false }); // Changed to headless: false for debugging
+            this.log('[DEBUG] chromium.launch() completed.');
+            this.log('[EVENT] Browser launched successfully.');
+            context = await browser.newContext();
+            page = await context.newPage();
+
+            this.log(`[EVENT] Navigating to submission page: ${this.submissionUrl}`);
+            await page.goto(this.submissionUrl, { waitUntil: 'networkidle', timeout: 60000 });
+            this.log('[EVENT] Navigation complete.');
+
+            this.log('[EVENT] Locating URL input field...');
+            const urlInput = page.locator('input[name="newurl"]');
+            try {
+                await urlInput.waitFor({ state: 'visible', timeout: 10000 });
+                this.log('[EVENT] Filling URL input field...');
+                await urlInput.fill(this.website.url);
+                this.log('[EVENT] URL input field filled.');
+            } catch (error) {
+                this.log(`[ERROR] Failed to locate or fill URL input field: ${error.message}`, 'error');
+                if (page) {
+                    await page.screenshot({ path: `${this.requestId}-seclabs-url-input-error-screenshot.png` });
+                    this.log(`[EVENT] Screenshot saved as ${this.requestId}-seclabs-url-input-error-screenshot.png`);
+                }
+                throw error;
+            }
+
+            this.log('[EVENT] Locating submit button...');
+            const submitButton = page.locator('input[type="submit"][value="Add URL"]');
+            try {
+                await submitButton.waitFor({ state: 'visible', timeout: 10000 });
+                this.log('[EVENT] Clicking submit button...');
+                await submitButton.click();
+                this.log('[EVENT] Submit button clicked.');
+            } catch (error) {
+                this.log(`[ERROR] Failed to locate or click submit button: ${error.message}`, 'error');
+                if (page) {
+                    await page.screenshot({ path: `${this.requestId}-seclabs-submit-button-error-screenshot.png` });
+                    this.log(`[EVENT] Screenshot saved as ${this.requestId}-seclabs-submit-button-error-screenshot.png`);
+                }
+                throw error;
+            }
+
+            this.log('[EVENT] Waiting for submission result message...');
+            // Check for success or already submitted message
+            const successMessageSelector = 'body'; // The message is directly in the body as a <b> tag
+            await page.waitForTimeout(3000); // Give some time for content to load after submission
+
+            let successMessage = '';
+            let cloudinaryUrl = '';
+
+            try {
+                const bodyContent = await page.textContent('body');
+                if (bodyContent.includes('is already included in the index, no need to resubmit!')) {
+                    successMessage = `URL ${this.website.url} is already included in the index, no need to resubmit!`;
+                    this.log(`[INFO] ${successMessage}`, 'info');
+                } else if (bodyContent.includes('URL added to queue!')) { // Assuming this is the success message
+                    successMessage = `URL ${this.website.url} successfully added to queue!`;
+                    this.log(`[SUCCESS] ${successMessage}`, 'success');
+                } else {
+                    successMessage = `Unknown submission result for ${this.website.url}. Body content: ${bodyContent.substring(0, 200)}...`;
+                    this.log(`[WARNING] ${successMessage}`, 'warning');
+                }
+
+                const screenshotPath = `screenshot_completion_${this.requestId}.png`;
+                await page.screenshot({ path: screenshotPath, fullPage: true });
+                this.log('[EVENT] Screenshot taken after completion.');
+
+                const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
+                cloudinaryUrl = cloudinaryUploadResult.secure_url;
+                this.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`, 'info');
+                console.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`);
+
+                fs.unlinkSync(screenshotPath);
+
+            } catch (error) {
+                this.log(`[ERROR] Failed to determine submission message or upload screenshot: ${error.message}`, 'error');
+                if (page) {
+                    await page.screenshot({ path: `${this.requestId}-seclabs-submission-result-error-screenshot.png` });
+                    this.log(`[EVENT] Screenshot saved as ${this.requestId}-seclabs-submission-result-error-screenshot.png`);
+                }
+                throw error;
+            }
+
+            this.log('[SUCCESS] Script finished successfully.', 'success');
+            return { success: true, message: successMessage, cloudinaryUrl: cloudinaryUrl };
+
+        } catch (error) {
+            this.log(`\n--- [SCRIPT ERROR] ---`, 'error');
+            this.log(`[ERROR] Global script error: ${error.message}`, 'error');
+            this.log('----------------------', 'error');
+            this.log('[EVENT] An error occurred.', 'error');
+            return { success: false, error: error.message };
+        } finally {
+            if (browser) {
+                await browser.close();
+                this.log('[EVENT] Browser closed after execution.');
+            } else {
+                this.log('[EVENT] Browser instance was not created or was null.', 'warning');
+            }
+        }
+    }
+}
+
+// --- ActiveSearchResults Adapter ---
+class ActiveSearchResultsAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+        this.submissionUrl = 'https://www.activesearchresults.com/addwebsite.php';
+    }
+
+    async publish() {
+        this.log(`[EVENT] Entering ActiveSearchResultsAdapter publish method for ${this.website.url}.`);
+
+        let browser;
+        let context;
+        let page;
+
+        try {
+            this.log('[DEBUG] Attempting chromium.launch()...');
+            browser = await chromium.launch({ headless: false }); // Changed to headless: false for debugging
+            this.log('[DEBUG] chromium.launch() completed.');
+            this.log('[EVENT] Browser launched successfully.');
+            context = await browser.newContext();
+            page = await context.newPage();
+
+            this.log(`[EVENT] Navigating to submission page: ${this.submissionUrl}`);
+            await page.goto(this.submissionUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            this.log('[EVENT] Navigation complete.');
+
+            this.log('[EVENT] Locating URL input field...');
+            const urlInput = page.locator('input[name="url"]');
+            try {
+                await urlInput.waitFor({ state: 'visible', timeout: 10000 });
+                this.log('[EVENT] Filling URL input field...');
+                await urlInput.fill(this.website.url);
+                this.log('[EVENT] URL input field filled.');
+            } catch (error) {
+                this.log(`[ERROR] Failed to locate or fill URL input field: ${error.message}`, 'error');
+                if (page) {
+                    await page.screenshot({ path: `${this.requestId}-activesearchresults-url-input-error-screenshot.png` });
+                    this.log(`[EVENT] Screenshot saved as ${this.requestId}-activesearchresults-url-input-error-screenshot.png`);
+                }
+                throw error;
+            }
+
+            this.log('[EVENT] Locating Email input field...');
+            const emailInput = page.locator('input[name="email"]');
+            try {
+                await emailInput.waitFor({ state: 'visible', timeout: 10000 });
+                this.log('[EVENT] Filling Email input field...');
+                await emailInput.fill(this.website.credentials.email);
+                this.log('[EVENT] Email input field filled.');
+            } catch (error) {
+                this.log(`[ERROR] Failed to locate or fill Email input field: ${error.message}`, 'error');
+                if (page) {
+                    await page.screenshot({ path: `${this.requestId}-activesearchresults-email-input-error-screenshot.png` });
+                    this.log(`[EVENT] Screenshot saved as ${this.requestId}-activesearchresults-email-input-error-screenshot.png`);
+                }
+                throw error;
+            }
+
+            this.log('[EVENT] Locating submit button...');
+            const submitButton = page.locator('input[type="submit"][name="submiturl"]');
+            try {
+                await submitButton.waitFor({ state: 'visible', timeout: 10000 });
+                this.log('[EVENT] Clicking submit button...');
+                await submitButton.click();
+                this.log('[EVENT] Submit button clicked.');
+
+                // Take a screenshot immediately after clicking the submit button for debugging
+                const postSubmitScreenshotPath = `${this.requestId}-post-submit-screenshot.png`;
+                await page.screenshot({ path: postSubmitScreenshotPath, fullPage: true });
+                this.log(`[EVENT] Screenshot taken immediately after submit button click: ${postSubmitScreenshotPath}`, 'info');
+                const cloudinaryPostSubmitUploadResult = await cloudinary.uploader.upload(postSubmitScreenshotPath);
+                this.log(`[EVENT] Post-submit screenshot uploaded to Cloudinary: ${cloudinaryPostSubmitUploadResult.secure_url}`, 'info');
+                fs.unlinkSync(postSubmitScreenshotPath);
+
+                this.log('[EVENT] Waiting for success message to appear and taking screenshot...');
+
+                // Log the full page content for debugging
+                const pageHtml = await page.content();
+                this.log(`[DEBUG] Page HTML after submission: ${pageHtml.substring(0, 500)}...`, 'detail');
+
+                // Wait for the success message to appear
+                const successMessageSelector = 'h1';
+                try {
+                    await page.waitForSelector(successMessageSelector, { state: 'visible', timeout: 15000 });
+                    const messageText = await page.textContent(successMessageSelector);
+                    if (!messageText || !messageText.includes('Added Web Site Confirmation')) {
+                        throw new Error('Success message not found or not as expected.');
+                    }
+                    this.log(`[INFO] Submission confirmation message: ${messageText}`, 'info');
+                } catch (error) {
+                    this.log(`[ERROR] Failed to find submission confirmation message: ${error.message}`, 'error');
+                    if (page) {
+                        await page.screenshot({ path: `${this.requestId}-activesearchresults-confirmation-error-screenshot.png` });
+                        this.log(`[EVENT] Screenshot saved as ${this.requestId}-activesearchresults-confirmation-error-screenshot.png`);
+                    }
+                    throw error;
+                }
+
+                const screenshotPath = `screenshot_completion_${this.requestId}.png`;
+                await page.screenshot({ path: screenshotPath, fullPage: true });
+                this.log('[EVENT] Screenshot taken after completion.');
+
+                const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
+                const cloudinaryUrl = cloudinaryUploadResult.secure_url;
+                this.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`, 'info');
+                console.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`);
+
+                fs.unlinkSync(screenshotPath); // Clean up the local screenshot file
+
+                this.log('[SUCCESS] Script finished successfully.', 'success');
+                return { success: true, message: 'URL submitted and screenshot taken.', cloudinaryUrl: cloudinaryUrl };
+
+            } catch (error) {
+                this.log(`\n--- [SCRIPT ERROR] ---`, 'error');
+                this.log(`[ERROR] Global script error: ${error.message}`, 'error');
+                this.log('----------------------', 'error');
+                this.log('[EVENT] An error occurred.', 'error');
+                return { success: false, error: error.message };
+            }
+
+        } catch (error) {
+            this.log(`\n--- [SCRIPT ERROR] ---`, 'error');
+            this.log(`[ERROR] Global script error: ${error.message}`, 'error');
+            this.log('----------------------', 'error');
+            this.log('[EVENT] An error occurred.', 'error');
+            return { success: false, error: error.message };
+        } finally {
+            if (browser) {
+                await browser.close();
+                this.log('[EVENT] Browser closed after execution.');
+            } else {
+                this.log('[EVENT] Browser instance was not created or was null.', 'warning');
+            }
+        }
+    }
+}
 
 // --- Adapter Factory ---
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
     '../controllers/ping/pingMyLinksController.js': PingMyLinksAdapter, // Assuming this is the correct path for the new controller
+    '../controllers/search/secretSearchEngineLabsController.js': SecretSearchEngineLabsAdapter, // New adapter for Secret Search Engine Labs
+    '../controllers/search/activeSearchResultsController.js': ActiveSearchResultsAdapter, // New adapter for Active Search Results
     // Add other controllers here
 };
 
