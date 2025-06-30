@@ -25,7 +25,7 @@ export const publish = (req, res) => {
         websites = api_keys.map(key => ({
             url: key.websiteUrl,
             credentials: key.credentials,
-            category: 'blog' // Assuming 'blog' for now based on the new structure
+            category: key.category || 'blog' // Allow category to be specified, default to 'blog'
         }));
         workerContent = { title, body: content };
 

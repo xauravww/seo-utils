@@ -6,6 +6,7 @@ const controllerMap = {
     'forum': '../controllers/simpleMachinesController.js',
     'social_media': '../controllers/linkedinController.js', // Default social media, can be overridden by domain
     'article': '../controllers/postController.js', // Generic article poster
+    'pingmylinks': '../controllers/ping/pingMyLinksController.js',
 
     // We can add more mappings here for:
     // search, ping, classified, bookmarking, directory

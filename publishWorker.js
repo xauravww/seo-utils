@@ -19,16 +19,21 @@ const processWebsite = async (jobDetails) => {
     // 2. If adapter exists, run it
     if (adapter) {
         console.log(`[${requestId}] [Worker] Adapter found, executing publish for ${url}.`);
-        await adapter.publish();
-        console.log(`[${requestId}] [Worker] Adapter publish completed for ${url}.`);
+        try {
+            const publishResult = await adapter.publish(); // Capture result from adapter
+            console.log(`[${requestId}] [Worker] Adapter publish completed for ${url}.`);
+            return publishResult; // Return the result
+        } catch (adapterError) {
+            console.error(`[${requestId}] [Worker] Error during adapter publish for ${url}:`, adapterError);
+            websocketLogger.log(requestId, `[Worker] Error during adapter publish for ${url}: ${adapterError.message}`, 'error');
+            return { success: false, error: adapterError.message }; // Return failure
+        }
     } else {
         const message = `[Worker] No adapter found for category: '${category}' or domain: ${url}`;
         console.warn(`[${requestId}] ${message}`);
         websocketLogger.log(requestId, message, 'warning');
+        return { success: false, error: message }; // Return failure if no adapter
     }
-
-    websocketLogger.log(requestId, `[Worker] Finished job for ${url}`, 'info');
-    console.log(`[${requestId}] [Worker] Finished job for ${url}`);
 };
 
 const run = async () => {
@@ -37,27 +42,39 @@ const run = async () => {
 
     websocketLogger.log(requestId, `[Worker] Background worker started. Processing ${websites.length} websites.`, 'info');
 
+    let allSuccess = true; // Track overall success
     // To run in parallel, Promise.all could be used, but sequential is safer for now.
     for (const website of websites) {
-        await processWebsite({ requestId, website, content });
+        const result = await processWebsite({ requestId, website, content }); // Capture result
+        if (!result || !result.success) { // If any website processing fails
+            allSuccess = false;
+        }
     }
 
-    websocketLogger.log(requestId, `[Worker] All jobs complete for request ${requestId}.`, 'success');
-    console.log(`[${requestId}] [Worker] All jobs complete.`);
-    
-    if (parentPort) {
-        parentPort.postMessage({ status: 'done' });
+    if (allSuccess) {
+        websocketLogger.log(requestId, `[Worker] All jobs complete for request ${requestId}.`, 'success');
+        console.log(`[${requestId}] [Worker] All jobs complete.`);
+        if (parentPort) {
+            parentPort.postMessage({ status: 'done' });
+        } else {
+            process.exit(0);
+        }
     } else {
-        process.exit(0);
+        websocketLogger.log(requestId, `[Worker] Some jobs failed for request ${requestId}.`, 'error');
+        console.error(`[${requestId}] [Worker] Some jobs failed.`);
+        if (parentPort) {
+            parentPort.postMessage({ status: 'error', message: 'Some publication jobs failed.' });
+        } else {
+            process.exit(1);
+        }
     }
 };
 
 run().catch(err => {
     // Make sure to log errors to the parent thread or a central log
     const { requestId } = workerData;
-    console.error(`[${requestId}] [Worker] A critical error occurred:`, err);
-    websocketLogger.log(requestId, `[Worker] A critical error occurred: ${err.message}`, 'error');
-    console.error(err);
+    console.error(`[${requestId}] [Worker] A critical error occurred in run():`, err);
+    websocketLogger.log(requestId, `[Worker] A critical error occurred in worker's run function: ${err.message}`, 'error');
     if (parentPort) {
         parentPort.postMessage({ status: 'error', error: err.message });
     } else {
