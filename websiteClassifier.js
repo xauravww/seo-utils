@@ -24,6 +24,8 @@ const domainMap = {
     'twitter.com': '../controllers/social_media/twitterController.js',
     'facebook.com': '../controllers/social_media/facebookController.js',
     'instagram.com': '../controllers/social_media/instagramController.js',
+    'pinterest.com': '../controllers/social_media/pinterestController.js',
+    'bookmarkzoo.win': '../controllers/bookmarking/bookmarkZooController.js',
     // We can add other domain-specific controllers here
 };
 

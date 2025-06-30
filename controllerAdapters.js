@@ -708,6 +708,103 @@ class InstagramAdapter extends BaseAdapter {
     }
 }
 
+// --- BookmarkZoo Adapter ---
+class BookmarkZooAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+        this.loginUrl = 'https://www.bookmarkzoo.win/pages/login';
+        this.submitUrl = 'https://www.bookmarkzoo.win/pages/submit';
+    }
+
+    async publish() {
+        this.log(`[EVENT] Entering BookmarkZooAdapter publish method.`);
+
+        let browser;
+        let context;
+        let page;
+
+        try {
+            this.log('[DEBUG] Attempting chromium.launch()...');
+            browser = await chromium.launch({ headless: false }); // Changed to headless: false for debugging
+            this.log('[DEBUG] chromium.launch() completed.');
+            this.log('[EVENT] Browser launched successfully.');
+            context = await browser.newContext();
+            page = await context.newPage();
+            page.setDefaultTimeout(60000);
+
+            // Step 1: Login
+            this.log(`[EVENT] Navigating to login page: ${this.loginUrl}`);
+            await page.goto(this.loginUrl, { waitUntil: 'domcontentloaded' });
+            this.log('[EVENT] Navigation to login page complete.');
+
+            this.log('[EVENT] Filling login form...');
+            await page.locator('input[name="username"]').fill(this.website.credentials.username);
+            await page.locator('input[name="password"]').fill(this.website.credentials.password);
+            await page.locator('input[name="captcha"]').fill('2'); // Captcha is always 2
+            this.log('[EVENT] Login form filled. Clicking login button...');
+            
+            await Promise.all([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+                page.locator('input[type="submit"][value="Login"]').click()
+            ]);
+            this.log('[EVENT] Login successful, navigated to new page.');
+
+            // Step 2: Navigate to submission page
+            this.log(`[EVENT] Navigating to submission page: ${this.submitUrl}`);
+            await page.goto(this.submitUrl, { waitUntil: 'domcontentloaded' });
+            this.log('[EVENT] Navigation to submission page complete.');
+
+            // Step 3: Fill submission form
+            this.log('[EVENT] Filling submission form...');
+            await page.locator('input[name="submit_url"]').fill(this.content.url || this.website.url);
+            await page.locator('input[name="submit_title"]').fill(this.content.title);
+            await page.locator('textarea[name="submit_body"]').fill(this.content.body);
+            this.log('[EVENT] Submission form filled. Clicking submit button...');
+
+            // Step 4: Submit the bookmark
+            await Promise.all([
+                page.waitForResponse(response => response.url().includes('/submit') && response.status() === 200), // Wait for a successful response on submit
+                page.locator('button[type="submit"][id="publish"]').click()
+            ]);
+            this.log('[EVENT] Submit button clicked. Waiting for success message.');
+
+            // Step 5: Extract the posted URL
+            const successMessageSelector = 'div.alert.alert-success#msg-flash a';
+            await page.waitForSelector(successMessageSelector, { state: 'visible', timeout: 15000 });
+            const postUrl = await page.getAttribute(successMessageSelector, 'href');
+
+            if (!postUrl) {
+                throw new Error('Could not extract the posted URL from the success message.');
+            }
+            this.log(`[SUCCESS] Bookmark posted successfully! URL: ${postUrl}`, 'success');
+
+            const screenshotPath = `screenshot_completion_${this.requestId}.png`;
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+            this.log('[EVENT] Screenshot taken after completion.');
+
+            const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
+            const cloudinaryUrl = cloudinaryUploadResult.secure_url;
+            this.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`, 'info');
+
+            fs.unlinkSync(screenshotPath);
+
+            return { success: true, postUrl: postUrl, cloudinaryUrl: cloudinaryUrl };
+
+        } catch (error) {
+            this.log(`\n--- [SCRIPT ERROR] ---`, 'error');
+            this.log(`[ERROR] Global script error: ${error.message}`, 'error');
+            this.log('----------------------', 'error');
+            this.log('[EVENT] An error occurred.', 'error');
+            return { success: false, error: error.message };
+        } finally {
+            if (browser) {
+                await browser.close();
+                this.log('[EVENT] Browser closed after execution.');
+            }
+        }
+    }
+}
+
 // --- Adapter Factory ---
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
@@ -718,6 +815,7 @@ const adapterMap = {
     '../controllers/social_media/twitterController.js': TwitterAdapter, // New adapter for Twitter
     '../controllers/social_media/facebookController.js': FacebookAdapter, // New adapter for Facebook
     '../controllers/social_media/instagramController.js': InstagramAdapter, // New adapter for Instagram
+    '../controllers/bookmarking/bookmarkZooController.js': BookmarkZooAdapter, // New adapter for Bookmark Zoo
     // Add other controllers here
 };
 
