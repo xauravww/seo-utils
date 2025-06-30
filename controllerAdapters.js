@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-extra';
 import axios from 'axios';
 import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
@@ -149,35 +149,44 @@ class WordPressAdapter extends BaseAdapter {
 
 // --- PingMyLinks Adapter ---
 class PingMyLinksAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+        // Map categories to their respective PingMyLinks submission URLs
+        this.pingUrls = {
+            'pingmylinks/googleping': 'https://www.pingmylinks.com/googleping/',
+            'pingmylinks/searchsubmission': 'https://www.pingmylinks.com/addurl/searchsubmission/',
+            'pingmylinks/socialsubmission': 'https://www.pingmylinks.com/addurl/socialsubmission/',
+        };
+    }
+
     async publish() {
         this.log('[DEBUG] PingMyLinksAdapter.publish() entered.');
         this.log('[EVENT] Entering PingMyLinksAdapter publish method.');
         
+        // Determine the target PingMyLinks URL based on the category
+        const targetPingUrl = this.pingUrls[this.website.category];
+        if (!targetPingUrl) {
+            throw new Error(`Unsupported PingMyLinks category: ${this.website.category}`);
+        }
+
         let browser;
+        let context;
+        let page;
+
         try {
             this.log('[DEBUG] Attempting chromium.launch()...');
             browser = await chromium.launch({ headless: false }); // Changed to headless: false for debugging
             this.log('[DEBUG] chromium.launch() completed.');
             this.log('[EVENT] Browser launched successfully.');
-            const context = await browser.newContext();
-            const page = await context.newPage();
+            context = await browser.newContext();
+            page = await context.newPage();
 
-            // Take screenshot at the beginning and upload to Cloudinary
-            const screenshotPath = `screenshot_start_${this.requestId}.png`;
-            await page.screenshot({ path: screenshotPath, fullPage: true });
-            this.log('[EVENT] Screenshot taken.');
-
-            const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
-            this.log(`[EVENT] Screenshot uploaded to Cloudinary: ${cloudinaryUploadResult.secure_url}`, 'info');
-            console.log(`[EVENT] Screenshot uploaded to Cloudinary: ${cloudinaryUploadResult.secure_url}`);
-
-            // You can also delete the local screenshot file after upload if desired
-            fs.unlinkSync(screenshotPath);
+            this.log(`[EVENT] Navigating to target page: ${targetPingUrl}`);
+            await page.goto(targetPingUrl, { waitUntil: 'networkidle', timeout: 60000 });
+            this.log('[EVENT] Navigation complete.');
 
             this.log('[EVENT] Setting up page event listeners.');
             page.on('request', request => {
-              // this.log('[EVENT] Network request sent', 'detail'); // Removed
-              // console.log('[EVENT] Network request sent'); // Removed
               let curlCommand = `curl \'${request.url()}\'`
               curlCommand += ` -X ${request.method()}`;
               const headers = request.headers();
@@ -191,83 +200,44 @@ class PingMyLinksAdapter extends BaseAdapter {
                 const urlMatch = postData.match(/(?:^|&)u=([^&]*)/);
                 if (urlMatch && urlMatch[1]) {
                     const pingedUrl = decodeURIComponent(urlMatch[1]);
-                    // this.log(`Successfully pinged to this website: ${pingedUrl}`, 'info'); // Removed
-                    // console.log(`Successfully pinged to this website: ${pingedUrl}`); // Removed
                 }
               }
-              // this.log('\n--- [REQUEST SENT] ---', 'detail'); // Removed
-              // console.log('\n--- [REQUEST SENT] ---'); // Removed
-              // this.log(curlCommand, 'detail'); // Removed
-              // console.log(curlCommand); // Removed
-              // this.log('----------------------\n', 'detail'); // Removed
-              // console.log('----------------------\n'); // Removed
             });
           
             page.on('response', async response => {
-              // this.log('[EVENT] Network response received', 'detail'); // Removed
-              // console.log('[EVENT] Network response received'); // Removed
-
-              // Check if the response is from api.php and log its body
               if (response.url().includes('api.php')) {
                 try {
                   const responseBody = await response.text();
-                  this.log(`Successfully pinged to this website: ${responseBody}`, 'info'); // Keep
-                  console.log(`Successfully pinged to this website: ${responseBody}`, 'info'); // Keep
+                  this.log(`Successfully pinged to this website: ${responseBody}`);
+                  console.log(`Successfully pinged to this website: ${responseBody}`);
                 } catch (e) {
-                  this.log(`Error reading API.PHP response body: ${e.message}`, 'error'); // Keep
-                  console.error(`Error reading API.PHP response body: ${e.message}`); // Keep
+                  this.log(`Error reading API.PHP response body: ${e.message}`, 'error');
+                  console.error(`Error reading API.PHP response body: ${e.message}`);
                 }
               }
-
-              // Existing detailed logging for all responses - Removed these
-              // this.log(`\n--- [RESPONSE RECEIVED] ---`, 'detail');
-              // console.log(`\n--- [RESPONSE RECEIVED] ---`);
-              // this.log(`STATUS: ${response.status()} ${response.statusText()}`, 'detail');
-              // console.log(`STATUS: ${response.status()} ${response.statusText()}`);
-              // this.log(`URL: ${response.url()}`, 'detail');
-              // console.log(`URL: ${response.url()}`);
-
-              // Adding response headers to console output - Removed these
-              // const headers = response.headers();
-              // this.log('HEADERS:', 'detail');
-              // console.log('HEADERS:');
-              // for (const key in headers) {
-              //   this.log(`  ${key}: ${headers[key]}`, 'detail');
-              //   console.log(`  ${key}: ${headers[key]}`);
-              // }
-
-              // this.log(`---------------------------\n`, 'detail');
-              // console.log(`---------------------------\n`);
             });
 
             page.on('pageerror', error => {
-                // this.log('[EVENT] Page error occurred', 'error'); // Removed
-                // console.log('[EVENT] Page error occurred'); // Removed
-                // this.log(`[ERROR] Page error: ${error.message}`, 'error'); // Removed
-                // console.error(`[ERROR] Page error: ${error.message}`); // Removed
             });
 
             page.on('console', msg => {
-                // this.log(`[EVENT] Console message: ${msg.type()} - ${msg.text()}`, 'detail'); // Removed
-                // console.log(`[EVENT] Console message: ${msg.type()} - ${msg.text()}`); // Removed
             });
 
-            this.log('[EVENT] Navigating to target page...');
-            await page.goto('https://www.pingmylinks.com/googleping/', { timeout: 60000 });
-            this.log('[EVENT] Navigation complete.');
-
+            // START: RESTORED URL FILLING AND SUBMIT BUTTON CLICK LOGIC
             this.log('[EVENT] Locating URL input field...');
             const furlInput = page.locator('#furl');
             try {
                 await furlInput.waitFor({ state: 'visible', timeout: 10000 });
                 this.log('[EVENT] Filling URL input field...');
-                // Use the URL from this.website.url
+                // Use the URL from this.website.url (the URL to be pinged)
                 await furlInput.fill(this.website.url);
                 this.log('[EVENT] URL input field filled.');
             } catch (error) {
                 this.log(`[ERROR] Failed to locate or fill URL input field: ${error.message}`, 'error');
-                await page.screenshot({ path: `${this.requestId}-furl-input-error-screenshot.png` });
-                this.log(`[EVENT] Screenshot saved as ${this.requestId}-furl-input-error-screenshot.png`);
+                if (page) {
+                    await page.screenshot({ path: `${this.requestId}-furl-input-error-screenshot.png` });
+                    this.log(`[EVENT] Screenshot saved as ${this.requestId}-furl-input-error-screenshot.png`);
+                }
                 throw error;
             }
 
@@ -280,15 +250,18 @@ class PingMyLinksAdapter extends BaseAdapter {
                 this.log('[EVENT] Submit button clicked.');
             } catch (error) {
                 this.log(`[ERROR] Failed to locate or click submit button: ${error.message}`, 'error');
-                await page.screenshot({ path: `${this.requestId}-submit-button-error-screenshot.png` });
-                this.log(`[EVENT] Screenshot saved as ${this.requestId}-submit-button-error-screenshot.png`);
+                if (page) {
+                    await page.screenshot({ path: `${this.requestId}-submit-button-error-screenshot.png` });
+                    this.log(`[EVENT] Screenshot saved as ${this.requestId}-submit-button-error-screenshot.png`);
+                }
                 throw error;
             }
+            // END: RESTORED URL FILLING AND SUBMIT BUTTON CLICK LOGIC
 
             this.log('[EVENT] Waiting for submission completion message (indefinitely)...');
             const successMessageSelector = 'div.messageok';
             try {
-                await page.waitForSelector(successMessageSelector, { state: 'visible', timeout: 0 }); // Wait indefinitely
+                await page.waitForSelector(successMessageSelector, { state: 'visible', timeout: 0 });
                 const messageText = await page.textContent(successMessageSelector);
                 if (messageText && messageText.includes('Submission Complete!')) {
                     this.log(`[SUCCESS] Submission Complete! Message: ${messageText}`, 'success');
@@ -297,22 +270,38 @@ class PingMyLinksAdapter extends BaseAdapter {
                 }
             } catch (error) {
                 this.log(`[ERROR] Failed to find submission complete message: ${error.message}`, 'error');
-                await page.screenshot({ path: `${this.requestId}-submission-error-screenshot.png` });
-                this.log(`[EVENT] Screenshot saved as ${this.requestId}-submission-error-screenshot.png`);
-                throw error; // Re-throw to indicate failure
+                if (page) {
+                    await page.screenshot({ path: `${this.requestId}-submission-error-screenshot.png` });
+                    this.log(`[EVENT] Screenshot saved as ${this.requestId}-submission-error-screenshot.png`);
+                }
+                throw error;
             }
 
-            this.log('[SUCCESS] Script finished successfully. The browser will remain open for inspection.', 'success');
+            this.log('[SUCCESS] Script finished successfully.', 'success');
             return { success: true };
 
         } catch (error) {
             this.log(`\n--- [SCRIPT ERROR] ---`, 'error');
             this.log(`[ERROR] Global script error: ${error.message}`, 'error');
             this.log('----------------------', 'error');
-            this.log('[EVENT] An error occurred. The browser will remain open for debugging.', 'error');
+            this.log('[EVENT] An error occurred.', 'error');
             return { success: false, error: error.message };
         } finally {
             if (browser) {
+                if (page) {
+                    const screenshotCompletionPath = `screenshot_completion_${this.requestId}.png`;
+                    await page.screenshot({ path: screenshotCompletionPath, fullPage: true });
+                    this.log('[EVENT] Screenshot taken after completion.');
+
+                    const cloudinaryUploadCompletionResult = await cloudinary.uploader.upload(screenshotCompletionPath);
+                    this.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUploadCompletionResult.secure_url}`, 'info');
+                    console.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUploadCompletionResult.secure_url}`);
+
+                    fs.unlinkSync(screenshotCompletionPath);
+                } else {
+                    this.log('[EVENT] Page instance was not created, skipping completion screenshot.', 'warning');
+                }
+
                 await browser.close();
                 this.log('[EVENT] Browser closed after execution.');
             } else {

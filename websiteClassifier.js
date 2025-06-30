@@ -7,6 +7,10 @@ const controllerMap = {
     'social_media': '../controllers/linkedinController.js', // Default social media, can be overridden by domain
     'article': '../controllers/postController.js', // Generic article poster
     'pingmylinks': '../controllers/ping/pingMyLinksController.js',
+    'pingmylinks/googleping': '../controllers/ping/pingMyLinksController.js',
+    'pingmylinks/searchsubmission': '../controllers/ping/pingMyLinksController.js',
+    'pingmylinks/socialsubmission': '../controllers/ping/pingMyLinksController.js',
+    'pingmylinks/addurl': '../controllers/ping/pingMyLinksController.js',
 
     // We can add more mappings here for:
     // search, ping, classified, bookmarking, directory
