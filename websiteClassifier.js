@@ -22,6 +22,7 @@ const domainMap = {
     'linkedin.com': '../controllers/linkedinController.js',
     'reddit.com': '../controllers/redditController.js',
     'twitter.com': '../controllers/social_media/twitterController.js',
+    'facebook.com': '../controllers/social_media/facebookController.js',
     // We can add other domain-specific controllers here
 };
 

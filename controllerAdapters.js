@@ -12,6 +12,7 @@ import cloudinary from 'cloudinary';
 import fs from 'fs';
 import { getRedditAccessToken, submitRedditPost } from './controllers/redditController.js';
 import { sendTweet } from './controllers/social_media/twitterController.js';
+import { postToFacebook } from './controllers/social_media/facebookController.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -638,6 +639,40 @@ class TwitterAdapter extends BaseAdapter {
     }
 }
 
+// --- Facebook Adapter ---
+class FacebookAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+    }
+
+    async publish() {
+        this.log(`[EVENT] Entering FacebookAdapter publish method.`);
+        const { appId, appSecret, pageAccessToken, pageId } = this.website.credentials;
+        const message = this.content.body; // Assuming the post content is in content.body
+
+        if (!appId || !appSecret || !pageAccessToken || !pageId || !message) {
+            const errorMessage = 'Missing required Facebook credentials or post message.';
+            this.log(`[ERROR] ${errorMessage}`, 'error');
+            return { success: false, error: errorMessage };
+        }
+
+        try {
+            this.log('[EVENT] Attempting to post to Facebook...');
+            const facebookPostResult = await postToFacebook({ appId, appSecret, pageAccessToken, pageId }, message);
+            
+            if (facebookPostResult.success) {
+                this.log(`[SUCCESS] Facebook post created successfully! URL: ${facebookPostResult.postUrl}`, 'success');
+                return { success: true, postUrl: facebookPostResult.postUrl };
+            } else {
+                throw new Error(facebookPostResult.error);
+            }
+        } catch (error) {
+            this.log(`[ERROR] Facebook post failed: ${error.message}`, 'error');
+            return { success: false, error: error.message };
+        }
+    }
+}
+
 // --- Adapter Factory ---
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
@@ -646,6 +681,7 @@ const adapterMap = {
     '../controllers/search/activeSearchResultsController.js': ActiveSearchResultsAdapter, // New adapter for Active Search Results
     '../controllers/redditController.js': RedditAdapter, // New adapter for Reddit
     '../controllers/social_media/twitterController.js': TwitterAdapter, // New adapter for Twitter
+    '../controllers/social_media/facebookController.js': FacebookAdapter, // New adapter for Facebook
     // Add other controllers here
 };
 
