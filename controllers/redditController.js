@@ -2,7 +2,7 @@ import axios from 'axios';
 import qs from 'qs';
 
 // Helper function to get the Reddit Access Token
-async function getRedditAccessToken(clientId, clientSecret, username, password) {
+export async function getRedditAccessToken(clientId, clientSecret, username, password) {
   try {
     const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
     const data = qs.stringify({
@@ -32,7 +32,7 @@ async function getRedditAccessToken(clientId, clientSecret, username, password) 
 }
 
 // Helper function to submit the post
-async function submitRedditPost(accessToken, subreddit, title, text, username) {
+export async function submitRedditPost(accessToken, subreddit, title, text, username) {
   try {
     const data = qs.stringify({
       sr: subreddit,

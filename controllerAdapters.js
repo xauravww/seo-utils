@@ -10,6 +10,7 @@ import { dirname } from 'path';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import cloudinary from 'cloudinary';
 import fs from 'fs';
+import { getRedditAccessToken, submitRedditPost } from './controllers/redditController.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -567,12 +568,48 @@ class ActiveSearchResultsAdapter extends BaseAdapter {
     }
 }
 
+// --- Reddit Adapter ---
+class RedditAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+    }
+
+    async publish() {
+        this.log(`[EVENT] Entering RedditAdapter publish method for ${this.website.url}.`);
+        const { clientId, clientSecret, username, password, subreddit } = this.website.credentials;
+        const { title, body } = this.content;
+
+        if (!clientId || !clientSecret || !username || !password || !subreddit || !title || !body) {
+            const errorMessage = 'Missing required Reddit credentials or content fields.';
+            this.log(`[ERROR] ${errorMessage}`, 'error');
+            return { success: false, error: errorMessage };
+        }
+
+        try {
+            this.log('[EVENT] Attempting to get Reddit access token...');
+            const accessToken = await getRedditAccessToken(clientId, clientSecret, username, password);
+            this.log('[SUCCESS] Access token obtained successfully.');
+
+            this.log('[EVENT] Submitting post to Reddit...');
+            const postUrl = await submitRedditPost(accessToken, subreddit, title, body, username);
+            
+            this.log(`[SUCCESS] Reddit post created successfully! URL: ${postUrl}`, 'success');
+            return { success: true, postUrl: postUrl };
+
+        } catch (error) {
+            this.log(`[ERROR] Reddit post creation failed: ${error.message}`, 'error');
+            return { success: false, error: error.message };
+        }
+    }
+}
+
 // --- Adapter Factory ---
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
     '../controllers/ping/pingMyLinksController.js': PingMyLinksAdapter, // Assuming this is the correct path for the new controller
     '../controllers/search/secretSearchEngineLabsController.js': SecretSearchEngineLabsAdapter, // New adapter for Secret Search Engine Labs
     '../controllers/search/activeSearchResultsController.js': ActiveSearchResultsAdapter, // New adapter for Active Search Results
+    '../controllers/redditController.js': RedditAdapter, // New adapter for Reddit
     // Add other controllers here
 };
 
