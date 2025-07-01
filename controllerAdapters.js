@@ -1248,7 +1248,121 @@ class GainWebAdapter extends BaseAdapter {
     }
 }
 
-// Add GainWebAdapter to adapterMap
+// --- SocialSubmissionEngine Adapter ---
+class SocialSubmissionEngineAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+        this.submitUrl = 'https://socialsubmissionengine.com/';
+    }
+
+    async publish() {
+        this.log(`[EVENT] Entering SocialSubmissionEngineAdapter publish method.`);
+
+        let browser;
+        let context;
+        let page;
+
+        try {
+            this.log('[DEBUG] Launching Chromium browser...');
+            browser = await chromium.launch({ headless: false });
+            this.log('[DEBUG] Chromium launched.');
+            context = await browser.newContext();
+            page = await context.newPage();
+            page.setDefaultTimeout(60000);
+
+            this.log(`[EVENT] Navigating to submission page: ${this.submitUrl}`);
+            await page.goto(this.submitUrl, { waitUntil: 'domcontentloaded' });
+            this.log('[EVENT] Navigation complete.');
+
+            // Step 1: Fill name
+            this.log('[EVENT] Filling name input');
+            const nameInput = page.locator('input[name="name"]');
+            await nameInput.fill(this.content.name || '');
+            this.log(`[DEBUG] Filled name input with: ${this.content.name || ''}`);
+
+            // Step 2: Fill email
+            this.log('[EVENT] Filling email input');
+            const emailInput = page.locator('input[name="email"]');
+            await emailInput.fill(this.content.email || '');
+            this.log(`[DEBUG] Filled email input with: ${this.content.email || ''}`);
+
+            // Step 3: Fill custom Website Address
+            this.log('[EVENT] Filling custom Website Address input');
+            const websiteInput = page.locator('input[name="custom Website Address"]');
+            await websiteInput.fill(this.content.url || '');
+            this.log(`[DEBUG] Filled Website Address input with: ${this.content.url || ''}`);
+
+
+            // Step 4: Click submit button (input[type="image"][name="submit"])
+            this.log('[EVENT] Clicking submit button');
+            const submitButton = page.locator('input[type="image"][name="submit"]');
+            await submitButton.click();
+
+            // After clicking submit, take screenshot and close browser immediately
+            const screenshotPath = `screenshot_after_submit_${this.requestId}.png`;
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+            this.log('[EVENT] Screenshot taken after submit button click.');
+            const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
+            const cloudinaryUrl = cloudinaryUploadResult.secure_url;
+            this.log(`[EVENT] Screenshot uploaded to Cloudinary: ${cloudinaryUrl}`);
+            console.log(`[${this.requestId}] [SocialSubmissionEngineAdapter] Screenshot URL: ${cloudinaryUrl}`);
+            fs.unlinkSync(screenshotPath);
+
+            // Check for error or normal message after submit
+            const errorSelector = 'p#error-text';
+            const confirmationSelector = 'p.Estilo17.style40[align="center"]';
+
+            let messageText = null;
+            try {
+                const errorElement = await page.locator(errorSelector).elementHandle();
+                if (errorElement) {
+                    messageText = await page.textContent(errorSelector);
+                    this.log(`[INFO] Submission message (error): ${messageText}`);
+                    console.log(`[${this.requestId}] [SocialSubmissionEngineAdapter] Submission message (error): ${messageText}`);
+                } else {
+                    await page.waitForSelector(confirmationSelector, { timeout: 15000 });
+                    messageText = await page.textContent(confirmationSelector);
+                    this.log(`[INFO] Submission message (confirmation): ${messageText}`);
+                    console.log(`[${this.requestId}] [SocialSubmissionEngineAdapter] Submission message (confirmation): ${messageText}`);
+                }
+            } catch (e) {
+                this.log(`[WARNING] No error or confirmation message found after submit: ${e.message}`, 'warning');
+            }
+
+            if (browser) {
+                await browser.close();
+                this.log('[EVENT] Browser closed after submit.');
+            }
+
+            return { success: true, message: messageText || 'Submit button clicked and screenshot taken.', screenshotUrl: cloudinaryUrl };
+
+        } catch (error) {
+            this.log(`[ERROR] SocialSubmissionEngineAdapter error: ${error.message}`, 'error');
+            console.error(`[${this.requestId}] [SocialSubmissionEngineAdapter] Error: ${error.message}`);
+
+            if (page) {
+                const errorScreenshotPath = `screenshot_error_${this.requestId}.png`;
+                await page.screenshot({ path: errorScreenshotPath, fullPage: true });
+                this.log(`[EVENT] Error screenshot taken: ${errorScreenshotPath}`);
+                const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
+                this.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`);
+                console.log(`[${this.requestId}] [SocialSubmissionEngineAdapter] Error screenshot URL: ${errorCloudinaryResult.secure_url}`);
+                fs.unlinkSync(errorScreenshotPath);
+            }
+
+            return { success: false, error: error.message };
+        } finally {
+            if (browser) {
+                await browser.close();
+                this.log('[EVENT] Browser closed after execution.');
+            } else {
+                this.log('[EVENT] Browser instance was not created or was null.', 'warning');
+            }
+        }
+    }
+}
+
+// Adapter map declaration moved above getAdapter to fix ReferenceError
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
     '../controllers/ping/pingMyLinksController.js': PingMyLinksAdapter,
@@ -1262,6 +1376,7 @@ const adapterMap = {
     '../controllers/bookmarking/teslaBookmarksController.js': TeslaBookmarksAdapter,
     '../controllers/bookmarking/pearlBookmarkingController.js': PearlBookmarkingAdapter,
     'directory/gainweb': GainWebAdapter,
+    'directory/socialsubmissionengine': SocialSubmissionEngineAdapter,
     'directory': GainWebAdapter
 };
 
