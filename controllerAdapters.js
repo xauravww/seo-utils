@@ -10,10 +10,12 @@ import { dirname } from 'path';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import cloudinary from 'cloudinary';
 import fs from 'fs';
+
 import { getRedditAccessToken, submitRedditPost } from './controllers/redditController.js';
 import { sendTweet } from './controllers/social_media/twitterController.js';
 import { postToFacebook } from './controllers/social_media/facebookController.js';
 import { postToInstagram } from './controllers/social_media/instagramController.js';
+import { UBookmarkingAdapter } from './controllers/bookmarking/ubookmarkingController.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -46,6 +48,7 @@ class BaseAdapter {
         throw new Error('Publish method not implemented!');
     }
 }
+
 
 
 // --- WordPress Adapter ---
@@ -1377,7 +1380,8 @@ const adapterMap = {
     '../controllers/bookmarking/pearlBookmarkingController.js': PearlBookmarkingAdapter,
     'directory/gainweb': GainWebAdapter,
     'directory/socialsubmissionengine': SocialSubmissionEngineAdapter,
-    'directory': GainWebAdapter
+    'directory': GainWebAdapter,
+    'bookmarking/ubookmarking': UBookmarkingAdapter
 };
 
 export const getAdapter = (jobDetails) => {
