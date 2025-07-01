@@ -805,6 +805,144 @@ class BookmarkZooAdapter extends BaseAdapter {
     }
 }
 
+// --- TeslaBookmarks Adapter ---
+class TeslaBookmarksAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+        this.loginUrl = 'https://teslabookmarks.com/?success=1#tab-login';
+        this.submitUrl = 'https://teslabookmarks.com/index.php/submit-story/';
+    }
+
+    async publish() {
+        this.log(`[EVENT] Entering TeslaBookmarksAdapter publish method.`);
+
+        let browser;
+        let context;
+        let page;
+
+        try {
+            this.log('[DEBUG] Attempting chromium.launch()...');
+            browser = await chromium.launch({ headless: false }); // Changed to headless: false for debugging
+            this.log('[DEBUG] chromium.launch() completed.');
+            this.log('[EVENT] Browser launched successfully.');
+            context = await browser.newContext();
+            page = await context.newPage();
+            page.setDefaultTimeout(60000); // Increased timeout for potentially slow pages
+
+            // Step 1: Login
+            this.log(`[EVENT] Navigating to login page: ${this.loginUrl}`);
+            await page.goto(this.loginUrl, { waitUntil: 'domcontentloaded' });
+            this.log('[EVENT] Navigation to login page complete.');
+
+            this.log('[EVENT] Filling login form...');
+            await page.locator('input[name="log"]').fill(this.website.credentials.username);
+            await page.locator('input[name="pwd"]').fill(this.website.credentials.password);
+            this.log('[EVENT] Login form filled. Clicking login button...');
+            
+            await Promise.all([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+                page.locator('input[type="submit"][name="wp-submit"]').click()
+            ]);
+            this.log('[EVENT] Login successful, navigated to new page.');
+
+            // Step 2: Navigate to submission page
+            this.log(`[EVENT] Navigating to submission page: ${this.submitUrl}`);
+            await page.goto(this.submitUrl, { waitUntil: 'domcontentloaded' });
+            this.log('[EVENT] Navigation to submission page complete.');
+
+            // Step 3: Fill submission form
+            this.log('[EVENT] Filling submission form...');
+            await page.locator('input[name="_story_url"]').fill(this.content.url || this.website.url);
+            await page.locator('input[name="title"]').fill(this.content.title);
+            await page.locator('select[name="story_category"]').selectOption({ value: '87550' }); // Value for 'other'
+            await page.locator('textarea[name="description"]').fill(this.content.body);
+            this.log('[EVENT] Submission form filled. Clicking submit button...');
+
+            // Step 4: Take screenshot before submission confirmation
+            const preSubmissionScreenshotPath = `screenshot_presubmission_${this.requestId}.png`;
+            await page.screenshot({ path: preSubmissionScreenshotPath, fullPage: true });
+            this.log('[EVENT] Pre-submission screenshot taken.');
+            const cloudinaryPreSubmissionUploadResult = await cloudinary.uploader.upload(preSubmissionScreenshotPath);
+            const preSubmissionCloudinaryUrl = cloudinaryPreSubmissionUploadResult.secure_url;
+            this.log(`[EVENT] Pre-submission screenshot uploaded to Cloudinary: ${preSubmissionCloudinaryUrl}`, 'info');
+            fs.unlinkSync(preSubmissionScreenshotPath); // Clean up the local screenshot file
+
+            // Step 5: Submit the story
+            await Promise.all([
+                page.waitForResponse(response => response.url().includes('/submit-story/') && response.status() === 200), // Wait for a successful response on submit
+                page.locator('input[type="submit"][name="submit"]').click()
+            ]);
+            this.log('[EVENT] Submit button clicked. Waiting for success message.');
+
+            // Step 6: Confirm submission and take final screenshot
+            const successMessageSelector = 'div.alert.alert-success';
+            const alreadySubmittedMessageSelector = 'div.alert.alert-danger';
+            let messageText = null;
+            let isSuccess = false;
+
+            try {
+                await page.waitForSelector(successMessageSelector, { state: 'visible', timeout: 15000 });
+                messageText = await page.textContent(successMessageSelector);
+                if (messageText && messageText.includes('Your story has been submitted. but your story is pending review.')) {
+                    isSuccess = true;
+                }
+            } catch (error) {
+                this.log(`[DEBUG] Primary success message not found, checking for already submitted message.`, 'detail');
+            }
+
+            if (!isSuccess) {
+                try {
+                    await page.waitForSelector(alreadySubmittedMessageSelector, { state: 'visible', timeout: 15000 });
+                    messageText = await page.textContent(alreadySubmittedMessageSelector);
+                    if (messageText && messageText.includes('The url is already been submitted, but this story is pending review.')) {
+                        isSuccess = true; // Consider this a success as the URL is handled
+                    }
+                } catch (error) {
+                    this.log(`[DEBUG] Already submitted message not found.`, 'detail');
+                }
+            }
+
+            if (!isSuccess || !messageText) {
+                const errorMessage = 'Submission confirmation message not found or not as expected.';
+                this.log(`[ERROR] ${errorMessage}`, 'error');
+                console.error(`[${this.requestId}] [TeslaBookmarksAdapter] ${errorMessage}`);
+                throw new Error(errorMessage);
+            }
+
+            this.log(`[SUCCESS] Submission confirmation message: ${messageText}`, 'success');
+            console.log(`[${this.requestId}] [TeslaBookmarksAdapter] ${messageText}`);
+
+            const screenshotPath = `screenshot_completion_${this.requestId}.png`;
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+            this.log('[EVENT] Screenshot taken after completion.');
+
+            const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
+            const cloudinaryUrl = cloudinaryUploadResult.secure_url;
+            this.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`, 'info');
+            console.log(`[${this.requestId}] [TeslaBookmarksAdapter] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`);
+
+            fs.unlinkSync(screenshotPath);
+
+            return { success: true, message: messageText, preSubmissionScreenshot: preSubmissionCloudinaryUrl, postSubmissionScreenshot: cloudinaryUrl };
+
+        } catch (error) {
+            this.log(`\n--- [SCRIPT ERROR] ---`, 'error');
+            this.log(`[ERROR] Global script error: ${error.message}`, 'error');
+            this.log('----------------------', 'error');
+            this.log('[EVENT] An error occurred.', 'error');
+            console.error(`[${this.requestId}] [TeslaBookmarksAdapter] An error occurred: ${error.message}`);
+            return { success: false, error: error.message };
+        } finally {
+            if (browser) {
+                await browser.close();
+                this.log('[EVENT] Browser closed after execution.');
+            } else {
+                this.log('[EVENT] Browser instance was not created or was null.', 'warning');
+            }
+        }
+    }
+}
+
 // --- Adapter Factory ---
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
@@ -816,6 +954,7 @@ const adapterMap = {
     '../controllers/social_media/facebookController.js': FacebookAdapter, // New adapter for Facebook
     '../controllers/social_media/instagramController.js': InstagramAdapter, // New adapter for Instagram
     '../controllers/bookmarking/bookmarkZooController.js': BookmarkZooAdapter, // New adapter for Bookmark Zoo
+    '../controllers/bookmarking/teslaBookmarksController.js': TeslaBookmarksAdapter, // New adapter for TeslaBookmarks
     // Add other controllers here
 };
 
