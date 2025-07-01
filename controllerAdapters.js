@@ -1115,31 +1115,187 @@ class PearlBookmarkingAdapter extends BaseAdapter {
     }
 }
 
-// --- Adapter Factory ---
+// --- GainWeb Adapter ---
+class GainWebAdapter extends BaseAdapter {
+    constructor(args) {
+        super(args);
+        this.submitUrl = 'https://gainweb.org/submit.php';
+    }
+
+    async publish() {
+        this.log(`[EVENT] Entering GainWebAdapter publish method.`);
+
+        let browser;
+        let context;
+        let page;
+
+        try {
+            this.log('[DEBUG] Launching Chromium browser...');
+            browser = await chromium.launch({ headless: false });
+            this.log('[DEBUG] Chromium launched.');
+            context = await browser.newContext();
+            page = await context.newPage();
+            page.setDefaultTimeout(60000);
+
+            this.log(`[EVENT] Navigating to submission page: ${this.submitUrl}`);
+            await page.goto(this.submitUrl, { waitUntil: 'domcontentloaded' });
+            this.log('[EVENT] Navigation complete.');
+
+            // Step 1: Click radio button with value="2"
+            this.log('[EVENT] Selecting radio button LINK_TYPE value=2');
+            const radioButton = page.locator('input[type="radio"][name="LINK_TYPE"][value="2"]');
+            await radioButton.check();
+
+            // Step 2: Fill title
+            this.log('[EVENT] Filling title input');
+            const titleInput = page.locator('input#TITLE[name="TITLE"]');
+            await titleInput.fill(this.content.title);
+
+            // Step 3: Fill URL
+            this.log('[EVENT] Filling URL input');
+            const urlInput = page.locator('input#URL[name="URL"]');
+            await urlInput.fill(this.content.url);
+
+            // Step 4: Select category "Search Engine Optimization (SEO)"
+            this.log('[EVENT] Selecting category "Search Engine Optimization (SEO)"');
+            const categorySelect = page.locator('select#CATEGORY_ID[name="CATEGORY_ID"]');
+            // Find option with text containing "Search Engine Optimization (SEO)"
+            const options = await categorySelect.locator('option').all();
+            let seoValue = null;
+            for (const option of options) {
+                const text = await option.textContent();
+                if (text && text.includes('Search Engine Optimization (SEO)')) {
+                    seoValue = await option.getAttribute('value');
+                    break;
+                }
+            }
+            if (!seoValue) {
+                throw new Error('Category "Search Engine Optimization (SEO)" not found in select options.');
+            }
+            await categorySelect.selectOption(seoValue);
+
+            // Step 5: Fill description
+            this.log('[EVENT] Filling description textarea');
+            const descriptionTextarea = page.locator('textarea#DESCRIPTION[name="DESCRIPTION"]');
+            await descriptionTextarea.fill(this.content.body || '');
+
+            // Step 6: Tick checkbox AGREERULES
+            this.log('[EVENT] Checking checkbox AGREERULES');
+            const agreeCheckbox = page.locator('input#AGREERULES[name="AGREERULES"]');
+            await agreeCheckbox.check();
+
+            // Step 7: Click submit button
+            this.log('[EVENT] Clicking submit button');
+            const submitButton = page.locator('input[type="submit"][name="continue"]');
+            await Promise.all([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+                submitButton.click()
+            ]);
+
+            // Step 8: Verify submission message
+            this.log('[EVENT] Verifying submission confirmation message');
+            const confirmationSelector = 'td.colspan-2.msg, td[colspan="2"].msg';
+            await page.waitForSelector(confirmationSelector, { timeout: 15000 });
+            const confirmationText = await page.textContent(confirmationSelector);
+            if (!confirmationText || !confirmationText.includes('Link submitted and awaiting approval')) {
+                throw new Error('Submission confirmation message not found or incorrect.');
+            }
+            this.log(`[SUCCESS] Submission confirmed: ${confirmationText}`);
+
+            // Step 9: Take screenshot
+            const screenshotPath = `screenshot_completion_${this.requestId}.png`;
+            await page.screenshot({ path: screenshotPath, fullPage: true });
+            this.log('[EVENT] Screenshot taken after submission.');
+
+            // Step 10: Upload screenshot to Cloudinary
+            const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
+            const cloudinaryUrl = cloudinaryUploadResult.secure_url;
+            this.log(`[EVENT] Screenshot uploaded to Cloudinary: ${cloudinaryUrl}`);
+            console.log(`[${this.requestId}] [GainWebAdapter] Screenshot URL: ${cloudinaryUrl}`);
+
+            // Step 11: Log confirmation message to websocketLogger and console
+            this.log(`[EVENT] Submission message: ${confirmationText}`);
+            console.log(`[${this.requestId}] [GainWebAdapter] Submission message: ${confirmationText}`);
+
+            // Clean up local screenshot file
+            fs.unlinkSync(screenshotPath);
+
+            return { success: true, message: confirmationText, screenshotUrl: cloudinaryUrl };
+
+        } catch (error) {
+            this.log(`[ERROR] GainWebAdapter error: ${error.message}`, 'error');
+            console.error(`[${this.requestId}] [GainWebAdapter] Error: ${error.message}`);
+
+            if (page) {
+                const errorScreenshotPath = `screenshot_error_${this.requestId}.png`;
+                await page.screenshot({ path: errorScreenshotPath, fullPage: true });
+                this.log(`[EVENT] Error screenshot taken: ${errorScreenshotPath}`);
+                const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
+                this.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`);
+                console.log(`[${this.requestId}] [GainWebAdapter] Error screenshot URL: ${errorCloudinaryResult.secure_url}`);
+                fs.unlinkSync(errorScreenshotPath);
+            }
+
+            return { success: false, error: error.message };
+        } finally {
+            if (browser) {
+                await browser.close();
+                this.log('[EVENT] Browser closed after execution.');
+            } else {
+                this.log('[EVENT] Browser instance was not created or was null.', 'warning');
+            }
+        }
+    }
+}
+
+// Add GainWebAdapter to adapterMap
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
-    '../controllers/ping/pingMyLinksController.js': PingMyLinksAdapter, // Assuming this is the correct path for the new controller
-    '../controllers/search/secretSearchEngineLabsController.js': SecretSearchEngineLabsAdapter, // New adapter for Secret Search Engine Labs
-    '../controllers/search/activeSearchResultsController.js': ActiveSearchResultsAdapter, // New adapter for Active Search Results
-    '../controllers/redditController.js': RedditAdapter, // New adapter for Reddit
-    '../controllers/social_media/twitterController.js': TwitterAdapter, // New adapter for Twitter
-    '../controllers/social_media/facebookController.js': FacebookAdapter, // New adapter for Facebook
-    '../controllers/social_media/instagramController.js': InstagramAdapter, // New adapter for Instagram
-    '../controllers/bookmarking/bookmarkZooController.js': BookmarkZooAdapter, // New adapter for Bookmark Zoo
-    '../controllers/bookmarking/teslaBookmarksController.js': TeslaBookmarksAdapter, // New adapter for TeslaBookmarks
-    '../controllers/bookmarking/pearlBookmarkingController.js': PearlBookmarkingAdapter, // New adapter for PearlBookmarking
-    // Add other controllers here
+    '../controllers/ping/pingMyLinksController.js': PingMyLinksAdapter,
+    '../controllers/search/secretSearchEngineLabsController.js': SecretSearchEngineLabsAdapter,
+    '../controllers/search/activeSearchResultsController.js': ActiveSearchResultsAdapter,
+    '../controllers/redditController.js': RedditAdapter,
+    '../controllers/social_media/twitterController.js': TwitterAdapter,
+    '../controllers/social_media/facebookController.js': FacebookAdapter,
+    '../controllers/social_media/instagramController.js': InstagramAdapter,
+    '../controllers/bookmarking/bookmarkZooController.js': BookmarkZooAdapter,
+    '../controllers/bookmarking/teslaBookmarksController.js': TeslaBookmarksAdapter,
+    '../controllers/bookmarking/pearlBookmarkingController.js': PearlBookmarkingAdapter,
+    'directory/gainweb': GainWebAdapter,
+    'directory': GainWebAdapter
 };
 
 export const getAdapter = (jobDetails) => {
-    // jobDetails now contains { requestId, website, content }
-    // The 'website' object itself has the credentials needed by the adapter.
     const controllerPath = getControllerForWebsite(jobDetails.website);
-    
+    console.log(`[getAdapter] controllerPath: ${controllerPath}`);
+    console.log(`[getAdapter] jobDetails.website.category: ${jobDetails.website.category}`);
+    console.log(`[getAdapter] jobDetails.website.url: ${jobDetails.website.url}`);
+
     if (controllerPath && adapterMap[controllerPath]) {
         const AdapterClass = adapterMap[controllerPath];
         return new AdapterClass(jobDetails);
     }
 
+    // Fallback: try matching by category
+    if (jobDetails.website.category && adapterMap[jobDetails.website.category]) {
+        const AdapterClass = adapterMap[jobDetails.website.category];
+        return new AdapterClass(jobDetails);
+    }
+
+    // Fallback: try matching by domain (hostname)
+    try {
+        const urlObj = new URL(jobDetails.website.url);
+        const hostname = urlObj.hostname;
+        if (adapterMap[hostname]) {
+            const AdapterClass = adapterMap[hostname];
+            return new AdapterClass(jobDetails);
+        }
+    } catch (e) {
+        // ignore URL parse errors
+    }
+
     return null;
-}; 
+};
+
+// --- Adapter Factory ---
+// Removed duplicate adapterMap and getAdapter declarations to fix redeclaration error
