@@ -27,6 +27,7 @@ const domainMap = {
     'pinterest.com': '../controllers/social_media/pinterestController.js',
     'bookmarkzoo.win': '../controllers/bookmarking/bookmarkZooController.js',
     'teslabookmarks.com': '../controllers/bookmarking/teslaBookmarksController.js',
+    'pearlbookmarking.com': '../controllers/bookmarking/pearlBookmarkingController.js',
     // We can add other domain-specific controllers here
 };
 
