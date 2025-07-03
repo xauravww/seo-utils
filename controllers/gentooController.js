@@ -10,7 +10,7 @@ export const postToGentooForums = async (req, res) => {
     let browser;
     try {
         console.log('[EVENT] Launching browser for Gentoo Forums...');
-        browser = await chromium.launch({ headless: false });
+        browser = await chromium.launch({ headless: true });
         const context = await browser.newContext();
         const page = await context.newPage();
 

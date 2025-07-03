@@ -15,7 +15,7 @@ class UBookmarkingAdapter {
   async publish() {
     let browser;
     try {
-      browser = await chromium.launch({ headless: false });
+      browser = await chromium.launch({ headless: true });
       const context = await browser.newContext();
       const page = await context.newPage();
       page.setDefaultTimeout(60000);

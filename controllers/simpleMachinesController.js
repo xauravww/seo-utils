@@ -82,7 +82,7 @@ export const postToSimpleMachines = async (req, res) => {
     let browser;
     try {
         console.log('[EVENT] Launching browser...');
-        browser = await chromium.launch({ headless: false });
+        browser = await chromium.launch({ headless: true });
         const context = await browser.newContext();
         const page = await context.newPage();
 

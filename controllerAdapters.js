@@ -194,7 +194,7 @@ class PingMyLinksAdapter extends BaseAdapter {
 
         try {
             this.log('[DEBUG] Attempting chromium.launch()...', 'detail', false);
-            browser = await chromium.launch({ headless: false }); // Changed to headless: false for debugging
+            browser = await chromium.launch({ headless: true }); // Changed to headless: true for debugging
             this.log('[DEBUG] chromium.launch() completed.', 'detail', false);
             this.log('[EVENT] Browser launched successfully.', 'info', false);
             context = await browser.newContext();
@@ -347,7 +347,7 @@ class SecretSearchEngineLabsAdapter extends BaseAdapter {
 
         try {
             this.log('[DEBUG] Attempting chromium.launch()...', 'detail', false);
-            browser = await chromium.launch({ headless: false }); // Changed to headless: false for debugging
+            browser = await chromium.launch({ headless: true }); // Changed to headless: true for debugging
             this.log('[DEBUG] chromium.launch() completed.', 'detail', false);
             this.log('[EVENT] Browser launched successfully.', 'info', false);
             context = await browser.newContext();
@@ -467,7 +467,7 @@ class ActiveSearchResultsAdapter extends BaseAdapter {
 
         try {
             this.log('[DEBUG] Attempting chromium.launch()...', 'detail', false);
-            browser = await chromium.launch({ headless: false }); // Changed to headless: false for debugging
+            browser = await chromium.launch({ headless: true }); // Changed to headless: true for debugging
             this.log('[DEBUG] chromium.launch() completed.', 'detail', false);
             this.log('[EVENT] Browser launched successfully.', 'info', false);
             context = await browser.newContext();
@@ -743,7 +743,7 @@ class BookmarkZooAdapter extends BaseAdapter {
 
         try {
             this.log('[DEBUG] Attempting chromium.launch()...', 'detail', false);
-            browser = await chromium.launch({ headless: false }); // Changed to headless: false for debugging
+            browser = await chromium.launch({ headless: true }); // Changed to headless: true for debugging
             this.log('[DEBUG] chromium.launch() completed.', 'detail', false);
             this.log('[EVENT] Browser launched successfully.', 'info', false);
             context = await browser.newContext();
@@ -817,7 +817,7 @@ class BookmarkZooAdapter extends BaseAdapter {
             return { success: false, error: error.message };
         } finally {
             if (browser) {
-                // await browser.close();
+                await browser.close();
                 this.log('[EVENT] Browser closed after execution.', 'detail', false);
             }
             else {
@@ -844,7 +844,7 @@ class TeslaBookmarksAdapter extends BaseAdapter {
 
         try {
             this.log('[DEBUG] Attempting chromium.launch()...', 'detail', false);
-            browser = await chromium.launch({ headless: false }); // Changed to headless: false for debugging
+            browser = await chromium.launch({ headless: true }); // Changed to headless: true for debugging
             this.log('[DEBUG] chromium.launch() completed.', 'detail', false);
             this.log('[EVENT] Browser launched successfully.', 'info', false);
             context = await browser.newContext();
@@ -1000,7 +1000,7 @@ class PearlBookmarkingAdapter extends BaseAdapter {
 
         try {
             this.log('[DEBUG] Attempting chromium.launch()...', 'detail', false);
-            browser = await chromium.launch({ headless: false });
+            browser = await chromium.launch({ headless: true });
             this.log('[DEBUG] chromium.launch() completed.', 'detail', false);
             this.log('[EVENT] Browser launched successfully.', 'info', false);
             context = await browser.newContext();
@@ -1101,7 +1101,7 @@ class GainWebAdapter extends BaseAdapter {
 
         try {
             this.log('[DEBUG] Launching Chromium browser...', 'detail', false);
-            browser = await chromium.launch({ headless: false });
+            browser = await chromium.launch({ headless: true });
             this.log('[DEBUG] Chromium launched.', 'detail', false);
             context = await browser.newContext();
             page = await context.newPage();
@@ -1237,7 +1237,7 @@ class SocialSubmissionEngineAdapter extends BaseAdapter {
 
         try {
             this.log('[DEBUG] Launching Chromium browser...', 'detail', false);
-            browser = await chromium.launch({ headless: false });
+            browser = await chromium.launch({ headless: true });
             this.log('[DEBUG] Chromium launched.', 'detail', false);
             context = await browser.newContext();
             page = await context.newPage();
