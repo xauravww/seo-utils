@@ -54,6 +54,13 @@ class BaseAdapter {
 
     // New method to retrieve collected logs
     getCollectedLogs() {
+        if (process.env.NODE_ENV === 'production') {
+            // Only return important logs in production
+            return this.collectedLogs.filter(log =>
+                ['info', 'success', 'warning', 'error'].includes(log.level)
+            );
+        }
+        // In non-production, return all logs
         return this.collectedLogs;
     }
 
@@ -66,6 +73,48 @@ class BaseAdapter {
 
 // --- WordPress Adapter ---
 class WordPressAdapter extends BaseAdapter {
+    // Helper to convert markdown to basic HTML, then allow only certain tags
+    static toBasicHtml(input) {
+        if (!input) return '';
+        let html = input;
+        // --- Basic Markdown to HTML conversion ---
+        // Headings
+        html = html.replace(/^###### (.*)$/gm, '<strong><em>$1</em></strong>')
+                   .replace(/^##### (.*)$/gm, '<strong>$1</strong>')
+                   .replace(/^#### (.*)$/gm, '<strong>$1</strong>')
+                   .replace(/^### (.*)$/gm, '<strong>$1</strong>')
+                   .replace(/^## (.*)$/gm, '<strong>$1</strong>')
+                   .replace(/^# (.*)$/gm, '<strong>$1</strong>');
+        // Bold **text** or __text__
+        html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                   .replace(/__(.*?)__/g, '<strong>$1</strong>');
+        // Italic *text* or _text_
+        html = html.replace(/\*(.*?)\*/g, '<em>$1</em>')
+                   .replace(/_(.*?)_/g, '<em>$1</em>');
+        // Links [text](url)
+        html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+        // Unordered lists
+        html = html.replace(/^[\*\-\+] (.*)$/gm, '<br/>&nbsp;&nbsp;• $1');
+        // Paragraphs (double newlines)
+        html = html.replace(/\n{2,}/g, '<br/><br/>');
+        // Inline code (not allowed, so escape)
+        html = html.replace(/`([^`]+)`/g, '&lt;code&gt;$1&lt;/code&gt;');
+        // --- End Markdown to HTML ---
+        // Now escape all < and >
+        let safe = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // Unescape allowed tags
+        safe = safe.replace(/&lt;a ([^&]*)&gt;/gi, '<a $1>')
+                   .replace(/&lt;\/a&gt;/gi, '</a>');
+        safe = safe.replace(/&lt;strong&gt;/gi, '<strong>')
+                   .replace(/&lt;\/strong&gt;/gi, '</strong>');
+        safe = safe.replace(/&lt;em&gt;/gi, '<em>')
+                   .replace(/&lt;\/em&gt;/gi, '</em>');
+        safe = safe.replace(/&lt;!--more--&gt;/gi, '<!--more-->');
+        safe = safe.replace(/&amp;nbsp;/gi, '&nbsp;');
+        safe = safe.replace(/&lt;br\/?&gt;/gi, '<br/>');
+        return safe;
+    }
+
     async loginAndExtract() {
         let browser;
         this.log(`Launching browser for login at ${this.website.url}`, 'detail', false);
@@ -126,7 +175,9 @@ class WordPressAdapter extends BaseAdapter {
 
         const client = wrapper(axios.create({ jar }));
 
-        const form = { ...hiddenInputs, post_title: this.content.title, content: this.content.body, publish: 'Publish' };
+        // Convert content.body to basic HTML
+        const htmlBody = WordPressAdapter.toBasicHtml(this.content.body);
+        const form = { ...hiddenInputs, post_title: this.content.title, content: htmlBody, publish: 'Publish' };
         const body = new URLSearchParams(form).toString();
 
         const postRes = await client.post(newPostUrl, body, {

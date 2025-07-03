@@ -92,7 +92,7 @@ const processWebsite = async (jobDetails) => {
 };
 
 const run = async () => {
-    const { requestId, websites, content, campaignId } = workerData;
+    const { requestId, websites, content, campaignId, minimumInclude } = workerData;
     console.log(`[${requestId}] [Worker] Background worker starting. Processing ${websites.length} websites.`);
 
     websocketLogger.log(requestId, `[Worker] Background worker started. Processing ${websites.length} websites.`, 'info');
@@ -101,37 +101,54 @@ const run = async () => {
     const results = []; // Array to store results from each adapter
     const categorizedLogs = {}; // Object to store logs categorized by website category
 
-    for (const website of websites) {
-        // Pass campaignId to processWebsite
-        const result = await processWebsite({ requestId, website, content, campaignId }); // Capture result
-        results.push(result); // Store the result
-        if (!result || !result.success) { // If any website processing fails
+    // --- NEW LOGIC: Only count successful publications, skip failed, and continue until minimumInclude is satisfied ---
+    let successCount = 0;
+    let triedIndexes = new Set();
+    let i = 0;
+    const maxTries = websites.length;
+    const requiredCount = minimumInclude || maxTries;
+    while (successCount < requiredCount && triedIndexes.size < maxTries) {
+        // Find the next untried website
+        while (i < websites.length && triedIndexes.has(i)) i++;
+        if (i >= websites.length) break;
+        triedIndexes.add(i);
+        const website = websites[i];
+        const result = await processWebsite({ requestId, website, content, campaignId });
+        results.push(result);
+        if (result && result.success) {
+            successCount++;
+        } else {
             allSuccess = false;
         }
-
-        // Aggregate logs by parent category
+        // Aggregate logs by parent category, and also track result count
         if (result.category && result.adapterLogs) {
             const parentCategory = getParentCategory(result.category);
             if (!categorizedLogs[parentCategory]) {
-                categorizedLogs[parentCategory] = [];
+                categorizedLogs[parentCategory] = { logs: [], result: '' };
             }
-            categorizedLogs[parentCategory].push(...result.adapterLogs);
+            categorizedLogs[parentCategory].logs.push(...result.adapterLogs);
         }
+        i = 0; // Always start from the beginning to find the next untried
     }
+    // Add result string to each category
+    for (const cat in categorizedLogs) {
+        categorizedLogs[cat].result = `${successCount}/${requiredCount}`;
+    }
+    // --- END NEW LOGIC ---
 
-    if (allSuccess) {
-        websocketLogger.log(requestId, `[Worker] All jobs complete for request ${requestId}.`, 'success');
-        console.log(`[${requestId}] [Worker] All jobs complete.`);
+    if (successCount > 0) {
+        websocketLogger.log(requestId, `[Worker] Publications completed: ${successCount}/${requiredCount} for request ${requestId}.`, 'success');
+        console.log(`[${requestId}] [Worker] Publications completed: ${successCount}/${requiredCount}.`);
         if (parentPort) {
             parentPort.postMessage({ status: 'done', results: results, categorizedLogs: categorizedLogs }); // Send back all results and categorized logs
         } else {
             process.exit(0);
         }
     } else {
-        websocketLogger.log(requestId, `[Worker] Some jobs failed for request ${requestId}.`, 'error');
-        console.error(`[${requestId}] [Worker] Some jobs failed.`);
+        websocketLogger.log(requestId, `[Worker] No successful publications for request ${requestId}.`, 'error');
+        console.error(`[${requestId}] [Worker] No successful publications.`);
         if (parentPort) {
-            parentPort.postMessage({ status: 'error', message: 'Some publication jobs failed.', categorizedLogs: categorizedLogs }); // Send back categorized logs on error as well
+            parentPort.postMessage({ status: 'error', message: 'No successful publication jobs.', categorizedLogs: categorizedLogs }); // Send back categorized logs on error as well
         } else {
             process.exit(1);
         }

@@ -46,6 +46,11 @@ export const getControllerForWebsite = (website) => {
             return domainMap[domain];
         }
 
+        // Special case: Only for blog2learn.com and uzblog.net with category 'article', use WordPress controller
+        if ((website.category === 'article' || website.category==='blog') && (domain === 'blog2learn.com' || domain === 'uzblog.net' ||domain=='blogkoo.com' || domain === 'imblogs.net' || domain==='blogerus.com' || domain==='bloginwi.com' || domain==='ezblogz.com')) {
+            return '../controllers/wpPostController.js';
+        }
+
         if (website.category && controllerMap[website.category]) {
             return controllerMap[website.category];
         }
@@ -53,7 +58,6 @@ export const getControllerForWebsite = (website) => {
         console.error(`Invalid URL provided for website: ${website.url}`, error);
         return null;
     }
-
 
     return null; // No controller found
 }; 

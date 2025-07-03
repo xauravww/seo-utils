@@ -71,11 +71,12 @@ export const publish = (req, res) => {
     }
 
     // 3. Filter websites by category
-    console.log(`[${requestId}] Step 3: Filtering websites by category "${campaign_category}".`);
+    console.log(`[${requestId}] Step 3: Filtering websites by category "${campaign_category}" and is_verified.`);
     if (info && info.websites && Array.isArray(info.websites)) {
-        availableWebsites = info.websites.filter(site => site.category === campaign_category);
-        websocketLogger.log(requestId, `[Filtering] Found ${availableWebsites.length} websites matching category "${campaign_category}".`, 'info');
-        console.log(`[${requestId}] Available websites after category filter: ${availableWebsites.length}`);
+        // Only include verified sites
+        availableWebsites = info.websites.filter(site => site.category === campaign_category && site.is_verified);
+        websocketLogger.log(requestId, `[Filtering] Found ${availableWebsites.length} verified websites matching category "${campaign_category}".`, 'info');
+        console.log(`[${requestId}] Available verified websites after category filter: ${availableWebsites.length}`);
     } else {
         websocketLogger.log(requestId, `[Filtering] No websites found in info.websites or info.websites is not an array.`, 'warning');
         console.error(`[${requestId}] No websites found in info.websites or info.websites is not an array.`);
@@ -87,51 +88,37 @@ export const publish = (req, res) => {
     const availableApiKeys = new Map((api_keys || []).map(key => [key.websiteUrl || key.url, key.credentials]));
     console.log(`[${requestId}] Available API Keys: ${availableApiKeys.size}`);
 
+    // Build a pool of all eligible, verified sites (with credentials if needed)
+    const eligibleWebsites = [];
     for (const site of availableWebsites) {
-        console.log(`[${requestId}] Processing site: ${site.url}, Category: ${site.category}, Have Credential: ${site.have_credential}`);
         if (site.have_credential) {
             if (availableApiKeys.has(site.url)) {
                 const credentials = availableApiKeys.get(site.url);
-                selectedWebsites.push({ ...site, credentials });
-                websocketLogger.log(requestId, `[Selection] Website "${site.url}" selected (requires credentials, found).`, 'detail');
-                console.log(`[${requestId}] Site selected with credentials: ${site.url}`);
+                eligibleWebsites.push({ ...site, credentials });
             } else {
                 skippedWebsites.push(site.url);
-                websocketLogger.log(requestId, `[Skipped] Website "${site.url}" skipped (requires credentials, not found).`, 'warning');
-                console.log(`[${requestId}] Site skipped, credentials not found: ${site.url}`);
             }
         } else {
-            selectedWebsites.push(site);
-            websocketLogger.log(requestId, `[Selection] Website "${site.url}" selected (no credentials required).`, 'detail');
-            console.log(`[${requestId}] Site selected, no credentials required: ${site.url}`);
+            eligibleWebsites.push(site);
         }
     }
 
-    // Randomly select up to minimumInclude websites from the valid ones
-    console.log(`[${requestId}] Randomly selecting websites. Selected before random: ${selectedWebsites.length}, Minimum Include: ${minimumInclude}`);
-    if (minimumInclude > 0 && selectedWebsites.length > minimumInclude) {
-        // Shuffle the array
-        for (let i = selectedWebsites.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [selectedWebsites[i], selectedWebsites[j]] = [selectedWebsites[j], selectedWebsites[i]];
-        }
-        selectedWebsites = selectedWebsites.slice(0, minimumInclude);
-        websocketLogger.log(requestId, `[Selection] Reduced selected websites to ${selectedWebsites.length} based on minimumInclude.`, 'info');
-        console.log(`[${requestId}] Final selected websites count after minimumInclude: ${selectedWebsites.length}`);
-    } else if (minimumInclude > 0 && selectedWebsites.length < minimumInclude) {
-        websocketLogger.log(requestId, `[WARNING] Found ${selectedWebsites.length} websites, but minimumInclude is ${minimumInclude}. Posting to all available.`, 'warning');
-        console.warn(`[${requestId}] Not enough websites to meet minimumInclude. Posting to all available.`);
-    }
-
-    if (selectedWebsites.length === 0) {
-        const errorMessage = `No API keys found for category '${campaign_category}'. Campaign not run.`;
+    if (eligibleWebsites.length === 0) {
+        const errorMessage = `No verified and credentialed websites found for category '${campaign_category}'. Campaign not run.`;
         websocketLogger.log(requestId, `❌ ${errorMessage}`, 'error');
         console.error(`[${requestId}] ${errorMessage}`);
         return res.status(400).json({ message: errorMessage });
     }
 
-    websites = selectedWebsites;
-    console.log(`[${requestId}] Final websites to process: ${websites.length}`);
+    // Randomly shuffle eligibleWebsites for fairness
+    for (let i = eligibleWebsites.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [eligibleWebsites[i], eligibleWebsites[j]] = [eligibleWebsites[j], eligibleWebsites[i]];
+    }
+
+    // Instead of slicing here, pass the full eligibleWebsites pool to the worker
+    websites = eligibleWebsites;
+    console.log(`[${requestId}] Final eligible websites to process: ${websites.length}`);
 
     user_id = info ? info.user_id : (credential ? credential.user_id : null);
     campaign_id = info ? info.campaign_id : (credential ? credential.campaign_id : null);
@@ -175,7 +162,7 @@ export const publish = (req, res) => {
         const worker = new Worker(workerPath, {
           // Pass the whole websites array and content.
           // The worker will handle the per-site credentials.
-          workerData: { requestId, websites, content: workerContent, campaignId: campaign_id, userId: user_id } // Pass campaign_id and user_id
+          workerData: { requestId, websites, content: workerContent, campaignId: campaign_id, userId: user_id, minimumInclude } // Pass campaign_id, user_id, and minimumInclude
         });
 
         worker.on('message', async (message) => { // Make this async to await API call
