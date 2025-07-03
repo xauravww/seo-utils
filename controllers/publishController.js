@@ -12,64 +12,185 @@ const __dirname = path.dirname(__filename);
 // import publishWorker from '../publishWorker.js'; 
 
 export const publish = (req, res) => {
-    // The 'credentials' object is no longer at the top level.
-    // It's now part of each item in the 'websites' array.
-    console.log("req.body in publish ", JSON.stringify(req.body));
-    const { websites: oldFormatWebsites, content: oldFormatContent, api_keys, title, content, user_id, campaign_id } = req.body; // Destructure user_id and campaign_id
     const requestId = uuidv4();
+    console.log(`[${requestId}] Request Body: ${JSON.stringify(req.body)}`);
 
-    let websites;
-    let workerContent;
+    let websites = [];
+    let workerContent = {};
+    let campaign_id = null;
+    let user_id = null;
+    let parsedContent = {};
 
-    if (api_keys) {
-        // Handle new format
-        websites = api_keys.map(key => ({
-            url: key.websiteUrl || key.url,
-            credentials: key.credentials,
-            category: key.category || 'blog' // Allow category to be specified, default to 'blog'
-        }));
-        workerContent = { title, body: content };
+    const { title, content, info, api_keys, credential, category, sites_details } = req.body;
 
-        if (!Array.isArray(websites) || websites.length === 0) {
-            return res.status(400).json({ message: 'Please provide a list of websites in api_keys.' });
+    // 1. Parse content first, as it's common across formats
+    console.log(`[${requestId}] Step 1: Parsing content.`);
+    if (typeof content === 'string') {
+        let cleanedContent = content.trim();
+        // Remove code block markers if present
+        if (cleanedContent.startsWith('```json')) {
+            cleanedContent = cleanedContent.replace(/^```json/, '').trim();
         }
-    } else {
-        // Handle old format
-        websites = oldFormatWebsites;
-        workerContent = oldFormatContent;
+        if (cleanedContent.endsWith('```')) {
+            cleanedContent = cleanedContent.replace(/```$/, '').trim();
+        }
+        try {
+            parsedContent = JSON.parse(cleanedContent);
+            console.log(`[${requestId}] Content parsed as JSON.`);
+        } catch (e) {
+            websocketLogger.log(requestId, `❌ Error parsing content JSON: ${e.message}`, 'error');
+            console.error(`[${requestId}] Error parsing content JSON: ${e.message}`);
+            // If content is not a valid JSON string, treat it as plain text body
+            parsedContent = { markdown: content, html: content };
+            console.log(`[${requestId}] Content treated as plain text.`);
+        }
+    } else if (content && typeof content === 'object') {
+        // If content is already an object (e.g., { markdown: "...", html: "..." })
+        parsedContent = content;
+        console.log(`[${requestId}] Content already an object.`);
+    }
 
-        if (!websites || !Array.isArray(websites) || websites.length === 0) {
-            return res.status(400).json({ message: 'Please provide a list of websites.' });
+    // Fix: Use category from top-level or info fallback
+    let campaign_category = category || (info && info.category);
+    let sitesDetails = info ? info.sites_details : (sites_details || []);
+    let minimumInclude = 0;
+    let availableWebsites = [];
+    let selectedWebsites = [];
+    let skippedWebsites = [];
+
+    // 2. Determine minimumInclude count
+    console.log(`[${requestId}] Step 2: Determining minimumInclude count for category "${campaign_category}".`);
+    const categoryDetail = sitesDetails.find(detail => detail.category === campaign_category);
+    if (categoryDetail && categoryDetail.minimumInclude !== undefined) {
+        minimumInclude = categoryDetail.minimumInclude;
+        websocketLogger.log(requestId, `[Config] Minimum include for category "${campaign_category}": ${minimumInclude}`, 'info');
+        console.log(`[${requestId}] Minimum include found: ${minimumInclude}`);
+    } else {
+        websocketLogger.log(requestId, `[Config] Minimum include not specified for category "${campaign_category}". Will attempt to use all matching websites.`, 'warning');
+        console.log(`[${requestId}] Minimum include not specified. Using all matching websites.`);
+    }
+
+    // 3. Filter websites by category
+    console.log(`[${requestId}] Step 3: Filtering websites by category "${campaign_category}".`);
+    if (info && info.websites && Array.isArray(info.websites)) {
+        availableWebsites = info.websites.filter(site => site.category === campaign_category);
+        websocketLogger.log(requestId, `[Filtering] Found ${availableWebsites.length} websites matching category "${campaign_category}".`, 'info');
+        console.log(`[${requestId}] Available websites after category filter: ${availableWebsites.length}`);
+    } else {
+        websocketLogger.log(requestId, `[Filtering] No websites found in info.websites or info.websites is not an array.`, 'warning');
+        console.error(`[${requestId}] No websites found in info.websites or info.websites is not an array.`);
+        return res.status(400).json({ message: 'No websites provided in info.websites for publication.' });
+    }
+
+    // 4. Validate credentials and select target websites
+    console.log(`[${requestId}] Step 4: Validating credentials and selecting target websites.`);
+    const availableApiKeys = new Map((api_keys || []).map(key => [key.websiteUrl || key.url, key.credentials]));
+    console.log(`[${requestId}] Available API Keys: ${availableApiKeys.size}`);
+
+    for (const site of availableWebsites) {
+        console.log(`[${requestId}] Processing site: ${site.url}, Category: ${site.category}, Have Credential: ${site.have_credential}`);
+        if (site.have_credential) {
+            if (availableApiKeys.has(site.url)) {
+                const credentials = availableApiKeys.get(site.url);
+                selectedWebsites.push({ ...site, credentials });
+                websocketLogger.log(requestId, `[Selection] Website "${site.url}" selected (requires credentials, found).`, 'detail');
+                console.log(`[${requestId}] Site selected with credentials: ${site.url}`);
+            } else {
+                skippedWebsites.push(site.url);
+                websocketLogger.log(requestId, `[Skipped] Website "${site.url}" skipped (requires credentials, not found).`, 'warning');
+                console.log(`[${requestId}] Site skipped, credentials not found: ${site.url}`);
+            }
+        } else {
+            selectedWebsites.push(site);
+            websocketLogger.log(requestId, `[Selection] Website "${site.url}" selected (no credentials required).`, 'detail');
+            console.log(`[${requestId}] Site selected, no credentials required: ${site.url}`);
         }
     }
 
+    // Randomly select up to minimumInclude websites from the valid ones
+    console.log(`[${requestId}] Randomly selecting websites. Selected before random: ${selectedWebsites.length}, Minimum Include: ${minimumInclude}`);
+    if (minimumInclude > 0 && selectedWebsites.length > minimumInclude) {
+        // Shuffle the array
+        for (let i = selectedWebsites.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [selectedWebsites[i], selectedWebsites[j]] = [selectedWebsites[j], selectedWebsites[i]];
+        }
+        selectedWebsites = selectedWebsites.slice(0, minimumInclude);
+        websocketLogger.log(requestId, `[Selection] Reduced selected websites to ${selectedWebsites.length} based on minimumInclude.`, 'info');
+        console.log(`[${requestId}] Final selected websites count after minimumInclude: ${selectedWebsites.length}`);
+    } else if (minimumInclude > 0 && selectedWebsites.length < minimumInclude) {
+        websocketLogger.log(requestId, `[WARNING] Found ${selectedWebsites.length} websites, but minimumInclude is ${minimumInclude}. Posting to all available.`, 'warning');
+        console.warn(`[${requestId}] Not enough websites to meet minimumInclude. Posting to all available.`);
+    }
+
+    if (selectedWebsites.length === 0) {
+        const errorMessage = `No API keys found for category '${campaign_category}'. Campaign not run.`;
+        websocketLogger.log(requestId, `❌ ${errorMessage}`, 'error');
+        console.error(`[${requestId}] ${errorMessage}`);
+        return res.status(400).json({ message: errorMessage });
+    }
+
+    websites = selectedWebsites;
+    console.log(`[${requestId}] Final websites to process: ${websites.length}`);
+
+    user_id = info ? info.user_id : (credential ? credential.user_id : null);
+    campaign_id = info ? info.campaign_id : (credential ? credential.campaign_id : null);
+
+    console.log(`[${requestId}] User ID: ${user_id}, Campaign ID: ${campaign_id}`);
+    if (!user_id || !campaign_id) {
+        websocketLogger.log(requestId, `❌ Missing user_id or campaign_id. Cannot proceed with campaign update.`, 'error');
+        console.error(`[${requestId}] Missing user_id or campaign_id. Campaign update will be skipped.`);
+        // Still allow the worker to run if userId/campaignId are not strictly required for the worker itself
+        // but log this as a warning or error for the campaign update part.
+    }
+
+    // Set workerContent to include title, url, tags, and description fields
+    workerContent = {
+        title: title || parsedContent.title || 'No Title',
+        url: parsedContent.url || '',
+        tags: parsedContent.tags || '',
+        description: parsedContent.description || parsedContent.markdown || parsedContent.html || '',
+        markdown: parsedContent.markdown || '',
+        html: parsedContent.html || '',
+        body: parsedContent.markdown || parsedContent.html || ''
+    };
+    console.log(`[${requestId}] Worker Content: ${JSON.stringify(workerContent)}`);
+
     // Immediately respond to the client
+    console.log(`[${requestId}] Sending initial response to client.`);
     res.status(202).json({
         message: 'Request received. Processing will start shortly.',
-        requestId: requestId
+        requestId: requestId,
+        selectedWebsitesCount: websites.length,
+        skippedWebsitesCount: skippedWebsites.length,
+        skippedWebsiteUrls: skippedWebsites
     });
 
     // --- Run the actual process in the background ---
     const runInBackground = () => {
         const workerPath = path.resolve(__dirname, '..', 'publishWorker.js');
         websocketLogger.log(requestId, `🚀 Spawning new worker for request ${requestId}.`);
+        console.log(`[${requestId}] Spawning worker at ${workerPath} with data:`, { requestId, websites, content: workerContent, campaignId: campaign_id, userId: user_id });
         
         const worker = new Worker(workerPath, {
           // Pass the whole websites array and content.
           // The worker will handle the per-site credentials.
-          workerData: { requestId, websites, content: workerContent, campaignId: campaign_id } // Pass campaign_id
+          workerData: { requestId, websites, content: workerContent, campaignId: campaign_id, userId: user_id } // Pass campaign_id and user_id
         });
 
         worker.on('message', async (message) => { // Make this async to await API call
             websocketLogger.log(requestId, `[Worker Update] ${JSON.stringify(message)}`);
+            console.log(`[${requestId}] Worker message received:`, message);
             // If the worker sends back categorized logs, update the campaign
             if (message.status === 'done' || message.status === 'error') {
                 if (campaign_id && user_id && message.categorizedLogs) {
+                    console.log(`[${requestId}] Worker finished, attempting to update campaign ${campaign_id}.`);
                     try {
-                        const apiUpdateUrl = `https://seo-backend-kskt.onrender.com/api/v1/campaigns/${campaign_id}`;
+                        const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
                         const updatePayload = {
                             user_id: user_id,
                             logs: {},
+                            status: message.status === 'done' ? 'completed' : 'failed', // Set status based on worker message
                         };
 
                         // Convert logs array to string for each category
@@ -82,13 +203,15 @@ export const publish = (req, res) => {
                         // Note: You'll need to handle the Authorization Bearer token here.
                         // For a real application, this token should be securely managed, not hardcoded.
                         // For demonstration, I'm using a placeholder token as provided in your example.
-                        const authToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NywiZW1haWwiOiJtZGF1cmF2aHVAZ21haWwuY29tIiwicm9sZSI6InVzZXIiLCJjb21wYW55X2lkIjpudWxsLCJpYXQiOjE3NTE1Mjg5NzksImV4cCI6MTc1MTYxNTM3OX0.y731DhgkFB-MKnZ2d1_cmT00FJYgcsRwBvLcV-BHRmc'; // REPLACE WITH ACTUAL TOKEN RETRIEVAL
+                        const authToken = 'HcjBqsJjLpi0bbg4jbtoi484hfuh9u3ufh98'; // REPLACE WITH ACTUAL TOKEN RETRIEVAL
 
                         const apiResponse = await axios.put(apiUpdateUrl, updatePayload, {
                             headers: {
                                 'accept': 'application/json',
-                                'Authorization': `Bearer ${authToken}`,
-                                'Content-Type': 'application/json'
+                                'x-util-secret': `${authToken}`,
+                                'Content-Type': 'application/json',
+                                // 'Authorization':`Bearer ${authToken}`
+
                             }
                         });
                         websocketLogger.log(requestId, `✅ Campaign ${campaign_id} updated with categorized logs. API Response Status: ${apiResponse.status}`);
@@ -103,6 +226,7 @@ export const publish = (req, res) => {
                     }
                 } else {
                     websocketLogger.log(requestId, `[Worker Update] Skipping campaign update: missing campaignId, userId, or categorizedLogs.`, 'warning');
+                    console.log(`[${requestId}] Skipping campaign update. Missing campaignId, userId, or categorizedLogs.`);
                 }
             }
         });
@@ -125,8 +249,10 @@ export const publish = (req, res) => {
         worker.on('exit', (code) => {
           if (code !== 0) {
             websocketLogger.log(requestId, `❗️ Worker thread exited with code ${code}.`);
+            console.error(`[${requestId}] Worker thread exited with code ${code}.`);
           } else {
             websocketLogger.log(requestId, `✅ Worker thread finished successfully.`);
+            console.log(`[${requestId}] Worker thread finished successfully.`);
           }
         });
     };
@@ -139,4 +265,5 @@ export const publish = (req, res) => {
         websocketLogger.log(requestId, ` - ${site.url} (Category: ${site.category})`);
     });
     websocketLogger.log(requestId, 'Processing complete (simulation).');
+    console.log(`[${requestId}] Initial processing complete. Worker started.`);
 };
