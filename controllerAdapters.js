@@ -36,12 +36,22 @@ class BaseAdapter {
         this.website = website; // Contains url, category, and credentials
         this.content = content;
         // Credentials are now located at this.website.credentials
+        this.category = website.category; // Store category directly for easy access
+        this.collectedLogs = []; // Array to store logs for this specific adapter instance
     }
 
     log(message, level = 'detail') {
         // Add a prefix to distinguish logs from different adapters
         const formattedMessage = `[${this.constructor.name}] ${message}`;
+        // Store log message and level internally
+        this.collectedLogs.push({ message: formattedMessage, level: level });
+        // Still send to websocketLogger for real-time updates as before
         websocketLogger.log(this.requestId, formattedMessage, level);
+    }
+
+    // New method to retrieve collected logs
+    getCollectedLogs() {
+        return this.collectedLogs;
     }
 
     async publish() {
@@ -801,7 +811,7 @@ class BookmarkZooAdapter extends BaseAdapter {
             return { success: false, error: error.message };
         } finally {
             if (browser) {
-                await browser.close();
+                // await browser.close();
                 this.log('[EVENT] Browser closed after execution.');
             }
         }
