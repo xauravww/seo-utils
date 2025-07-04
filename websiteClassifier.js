@@ -57,6 +57,11 @@ export const getControllerForWebsite = (website) => {
             return 'devto';
         }
 
+        // Special case: hashnode.com should use HashnodeAdapter for both 'article' and 'blog' categories
+        if ((website.category === 'blog' || website.category === 'article') && (domain === 'hashnode.com' || domain.endsWith('.hashnode.dev'))) {
+            return 'hashnode';
+        }
+
         if (website.category && controllerMap[website.category]) {
             return controllerMap[website.category];
         }
