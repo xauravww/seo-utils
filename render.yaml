@@ -6,7 +6,9 @@ services:
     buildCommand: |
       npm install
       npx playwright install chromium --with-deps
-    startCommand: node index.js
+    startCommand: |
+      npx playwright install chromium --with-deps
+      node index.js
     envVars:
       - key: REDIS_URL
         fromService:
