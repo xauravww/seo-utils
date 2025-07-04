@@ -8,6 +8,7 @@ services:
       - REDIS_URL=redis://redis:6379
     depends_on:
       - redis
+    command: sh -c "npx playwright install chromium --with-deps && node index.js"
   redis:
     image: redis:latest
     ports:
