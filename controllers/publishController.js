@@ -183,7 +183,9 @@ export const publish = (req, res) => {
                         // Convert logs array to string for each category
                         for (const category in message.categorizedLogs) {
                             if (message.categorizedLogs.hasOwnProperty(category)) {
-                                updatePayload.logs[category] = JSON.stringify(message.categorizedLogs[category]);
+                                // Add category as a property in the logs object
+                                const logsWithCategory = { ...message.categorizedLogs[category], category };
+                                updatePayload.logs[category] = JSON.stringify(logsWithCategory);
                             }
                         }
 
