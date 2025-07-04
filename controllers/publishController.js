@@ -18,6 +18,8 @@ const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
 const publishQueue = new Queue('publishQueue', { connection });
 
+const queueConcurrency = parseInt(process.env.QUEUE_CONCURRENCY, 10) || 1;
+
 // Helper function for main publish logic
 async function processPublishJob(reqBody, requestId) {
     let websites = [];
@@ -201,7 +203,7 @@ async function processPublishJob(reqBody, requestId) {
 const bullWorker = new BullWorker('publishQueue', async (job) => {
     const { reqBody, requestId } = job.data;
     await processPublishJob(reqBody, requestId);
-}, { connection });
+}, { connection, concurrency: queueConcurrency });
 
 export const publish = async (req, res) => {
     const requestId = uuidv4();
