@@ -47,7 +47,7 @@ export const getControllerForWebsite = (website) => {
         }
 
         // Special case: Only for blog2learn.com and uzblog.net with category 'article', use WordPress controller
-        if ((website.category === 'article' || website.category==='blog') && (domain === 'blog2learn.com' || domain === 'uzblog.net' ||domain=='blogkoo.com' || domain === 'imblogs.net' || domain==='blogerus.com' || domain==='bloginwi.com' || domain==='ezblogz.com')) {
+        if ((website.category === 'article' || website.category==='blog') && (domain === 'blog2learn.com' || domain === 'uzblog.net' ||domain=='blogkoo.com' || domain === 'imblogs.net' || domain==='blogerus.com' || domain==='bloginwi.com' || domain==='ezblogz.com' || domain==='blog5.net'|| domain==='total-blog.com' || domain==='shotblogs.com')) {
             return '../controllers/wpPostController.js';
         }
 
