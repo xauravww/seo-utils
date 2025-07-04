@@ -14,7 +14,8 @@ const __dirname = path.dirname(__filename);
 // import publishWorker from '../publishWorker.js'; 
 
 // Redis connection for BullMQ
-const connection = new IORedis({ maxRetriesPerRequest: null });
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
 const publishQueue = new Queue('publishQueue', { connection });
 
 // Helper function for main publish logic
