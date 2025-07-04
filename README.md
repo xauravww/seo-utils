@@ -74,6 +74,6 @@ Interactive API documentation is available via Swagger UI. Once the server is ru
     }
     ```
 
-### Making API Calls
+### Making API Calls .
 
 To use the protected endpoints (for posts and comments), you must include the `sessionId` you received in the body of your JSON request. See the examples in the `/api-docs` for detailed instructions on how to structure your requests. 
