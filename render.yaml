@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: my-node-app
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: my-redis
+          property: connectionString
+
+  - type: redis
+    name: my-redis
+    plan: free
+    ipAllowList: [] # only allow internal connections
+    maxmemoryPolicy: noeviction # recommended for queues 
