@@ -83,9 +83,15 @@ async function processPublishJob(reqBody, requestId) {
         if (site.have_credential) {
             if (availableApiKeys.has(site.url)) {
                 const credentials = availableApiKeys.get(site.url);
-                eligibleWebsites.push({ ...site, credentials });
+                if (credentials && Object.keys(credentials).length > 0) {
+                    eligibleWebsites.push({ ...site, credentials });
+                } else {
+                    skippedWebsites.push(site.url);
+                    websocketLogger.log(requestId, `[Filtering] Skipping ${site.url} due to missing or empty credentials.`, 'warning');
+                }
             } else {
                 skippedWebsites.push(site.url);
+                websocketLogger.log(requestId, `[Filtering] Skipping ${site.url} due to missing API key.`, 'warning');
             }
         } else {
             eligibleWebsites.push(site);
@@ -112,7 +118,7 @@ async function processPublishJob(reqBody, requestId) {
     }
     workerContent = {
         title: title || parsedContent.title || 'No Title',
-        url: parsedContent.url || '',
+        url: (info && info.user && info.user.public_website_1) ? info.user.public_website_1 : (parsedContent.url || ''),
         tags: parsedContent.tags || '',
         description: parsedContent.description || parsedContent.markdown || parsedContent.html || '',
         markdown: parsedContent.markdown || '',
@@ -147,6 +153,8 @@ async function processPublishJob(reqBody, requestId) {
                         }
                     }
                     const authToken = 'HcjBqsJjLpi0bbg4jbtoi484hfuh9u3ufh98';
+
+                    console.log("updatedPayload",updatePayload)
                     const apiResponse = await axios.put(apiUpdateUrl, updatePayload, {
                         headers: {
                             'accept': 'application/json',
@@ -207,6 +215,7 @@ const bullWorker = new BullWorker('publishQueue', async (job) => {
 
 export const publish = async (req, res) => {
     const requestId = uuidv4();
+    console.log("req.body in publish: " , req.body)
     await publishQueue.add('publish', { reqBody: req.body, requestId });
     res.status(202).json({
         message: 'Request received. Processing will start shortly (queued).',

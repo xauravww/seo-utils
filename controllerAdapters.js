@@ -812,12 +812,11 @@ class BookmarkZooAdapter extends BaseAdapter {
             await page.locator('input[name="password"]').fill(this.website.credentials.password);
             await page.locator('input[name="captcha"]').fill('2'); // Captcha is always 2
             this.log('[EVENT] Login form filled. Clicking login button...', 'detail', false);
-            
             await Promise.all([
                 page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-                page.locator('input[type="submit"][value="Login"]').click()
+                page.locator('input[type="submit"][name="wp-submit"]').click()
             ]);
-            this.log('[EVENT] Login successful, navigated to new page.', 'detail', false);
+            this.log('[EVENT] Login successful.', 'detail', false);
 
             // Step 2: Navigate to submission page
             this.log(`[EVENT] Navigating to submission page: ${this.submitUrl}`, 'detail', false);
@@ -825,9 +824,9 @@ class BookmarkZooAdapter extends BaseAdapter {
             this.log('[EVENT] Navigation to submission page complete.', 'detail', false);
 
             this.log('[EVENT] Filling submission form...', 'detail', false);
-            await page.locator('input[name="submit_url"]').fill(this.content.url || this.website.url);
-            await page.locator('input[name="submit_title"]').fill(this.content.title);
-            await page.locator('textarea[name="submit_body"]').fill(this.content.body);
+            await page.locator('input[name="submit_url"]').fill(this.content.url || this.website.url, { timeout: 10000 });
+            await page.locator('input[name="submit_title"]').fill(this.content.title, { timeout: 10000 });
+            await page.locator('textarea[name="submit_body"]').fill(this.content.body, { timeout: 10000 });
             this.log('[EVENT] Submission form filled. Clicking submit button...', 'detail', false);
 
             // Step 4: Submit the bookmark
@@ -879,177 +878,26 @@ class BookmarkZooAdapter extends BaseAdapter {
     }
 }
 
-// --- TeslaBookmarks Adapter ---
-class TeslaBookmarksAdapter extends BaseAdapter {
+// --- TeslaBookmarks & PearlBookmarking Unified Adapter ---
+class TeslaPearlBookmarkingAdapter extends BaseAdapter {
     constructor(args) {
         super(args);
-        this.loginUrl = 'https://teslabookmarks.com/?success=1#tab-login';
-        this.submitUrl = 'https://teslabookmarks.com/index.php/submit-story/';
+        this.loginUrl = args.loginUrl || (this.website.url.includes('pearlbookmarking.com')
+            ? 'https://pearlbookmarking.com/?success=1#tab-login'
+            : 'https://teslabookmarks.com/?success=1#tab-login');
+        this.submitUrl = args.submitUrl || (this.website.url.includes('pearlbookmarking.com')
+            ? 'https://pearlbookmarking.com/index.php/submit-story/'
+            : 'https://teslabookmarks.com/index.php/submit-story/');
+        this.reviewUrl = args.reviewUrl || (this.website.url.includes('pearlbookmarking.com')
+            ? 'https://pearlbookmarking.com/?status=pending&submitted=1'
+            : 'https://teslabookmarks.com/?status=pending&submitted=1');
     }
 
     async publish() {
-        this.log(`[EVENT] Entering TeslaBookmarksAdapter publish method.`, 'info', true);
-
+        this.log(`[EVENT] Entering TeslaPearlBookmarkingAdapter publish method.`, 'info', true);
         let browser;
         let context;
         let page;
-
-        try {
-            this.log('[DEBUG] Attempting chromium.launch()...', 'detail', false);
-            browser = await chromium.launch({ headless: true }); // Changed to headless: true for debugging
-            this.log('[DEBUG] chromium.launch() completed.', 'detail', false);
-            this.log('[EVENT] Browser launched successfully.', 'info', false);
-            context = await browser.newContext();
-            page = await context.newPage();
-            page.setDefaultTimeout(60000); // Increased timeout for potentially slow pages
-
-            // Step 1: Login
-            this.log(`[EVENT] Navigating to login page: ${this.loginUrl}`, 'detail', false);
-            await page.goto(this.loginUrl, { waitUntil: 'domcontentloaded' });
-            this.log('[EVENT] Navigation to login page complete.', 'detail', false);
-
-            this.log('[EVENT] Filling login form...', 'detail', false);
-            await page.locator('input[name="log"]').fill(this.website.credentials.username);
-            await page.locator('input[name="pwd"]').fill(this.website.credentials.password);
-            this.log('[EVENT] Login form filled. Clicking login button...', 'detail', false);
-            
-            await Promise.all([
-                page.locator('input[type="submit"][name="wp-submit"]').click(),
-                page.locator('#popup').waitFor({ state: 'hidden', timeout: 30000 }) // Wait for the login popup to be hidden
-            ]);
-            this.log('[EVENT] Login successful, popup hidden.', 'detail', false);
-
-            // Step 2: Navigate to submission page
-            this.log(`[EVENT] Navigating to submission page: ${this.submitUrl}`, 'detail', false);
-            await page.goto(this.submitUrl, { waitUntil: 'domcontentloaded' });
-            this.log('[EVENT] Navigation to submission page complete.', 'detail', false);
-
-            // Step 3: Fill submission form
-            this.log('[EVENT] Filling submission form...', 'detail', false);
-            await page.locator('input[name="_story_url"]').fill(this.content.url || this.website.url);
-            await page.locator('input[name="title"]').fill(this.content.title);
-            await page.locator('select[name="story_category"]').selectOption({ value: '87550' }); // Value for 'other'
-            await page.locator('textarea[name="description"]').fill(this.content.body);
-            this.log('[EVENT] Submission form filled. Clicking submit button...', 'detail', false);
-
-            // Step 4: Take screenshot before submission confirmation
-            const preSubmissionScreenshotPath = `${this.requestId}-presubmission-screenshot.png`;
-            await page.screenshot({ path: preSubmissionScreenshotPath, fullPage: true });
-            this.log('[EVENT] Pre-submission screenshot taken.', 'info', true);
-            const cloudinaryPreSubmissionUploadResult = await cloudinary.uploader.upload(preSubmissionScreenshotPath);
-            const preSubmissionCloudinaryUrl = cloudinaryPreSubmissionUploadResult.secure_url;
-            this.log(`[EVENT] Pre-submission screenshot uploaded to Cloudinary: ${preSubmissionCloudinaryUrl}`, 'info', true);
-            fs.unlinkSync(preSubmissionScreenshotPath);
-
-            // Add network logging for debugging the submission
-            page.on('request', request => {
-                this.log(`[NETWORK REQUEST] ${request.method()} ${request.url()}`, 'detail', false);
-                if (request.postData()) {
-                    this.log(`[NETWORK REQUEST PAYLOAD] ${request.postData()}`, 'detail', false);
-                }
-            });
-            page.on('response', async response => {
-                this.log(`[NETWORK RESPONSE] ${response.status()} ${response.url()}`, 'detail', false);
-                try {
-                    const responseBody = await response.text();
-                    this.log(`[NETWORK RESPONSE BODY] ${responseBody.substring(0, 500)}...`, 'detail', false); // Log first 500 chars
-                } catch (e) {
-                    this.log(`[NETWORK RESPONSE BODY ERROR] Could not read response body: ${e.message}`, 'detail', false);
-                }
-            });
-
-            // Step 5: Submit the story
-            await Promise.all([
-                page.waitForResponse(response => response.url().includes('/submit-story/') && response.status() === 200),
-                page.locator('input[type="submit"][name="submit"]').click()
-            ]);
-            this.log('[EVENT] Submit button clicked. Waiting for success message.', 'detail', false);
-
-            // Step 6: Confirm submission and take final screenshot
-            const successMessageSelector = 'div.alert.alert-success';
-            const alreadySubmittedMessageSelector = 'div.alert.alert-danger';
-            let messageText = null;
-            let isSuccess = false;
-
-            try {
-                await page.waitForSelector(successMessageSelector, { state: 'visible', timeout: 15000 });
-                messageText = await page.textContent(successMessageSelector);
-                if (messageText && messageText.includes('Your story has been submitted. but your story is pending review.')) {
-                    isSuccess = true;
-                }
-            } catch (error) {
-                this.log(`[DEBUG] Primary success message not found, checking for already submitted message.`, 'detail', false);
-            }
-
-            if (!isSuccess) {
-                try {
-                    await page.waitForSelector(alreadySubmittedMessageSelector, { state: 'visible', timeout: 15000 });
-                    messageText = await page.textContent(alreadySubmittedMessageSelector);
-                    if (messageText && messageText.includes('The url is already been submitted, but this story is pending review.')) {
-                        isSuccess = true; // Consider this a success as the URL is handled
-                    }
-                } catch (error) {
-                    this.log(`[DEBUG] Already submitted message not found.`, 'detail', false);
-                }
-            }
-
-            if (!isSuccess || !messageText) {
-                const errorMessage = 'Submission confirmation message not found or not as expected.';
-                this.log(`[ERROR] ${errorMessage}`, 'error', true);
-                console.error(`[${this.requestId}] [TeslaBookmarksAdapter] ${errorMessage}`);
-                throw new Error(errorMessage);
-            }
-
-            this.log(`[SUCCESS] Submission confirmation message: ${messageText}`, 'success', true);
-            console.log(`[${this.requestId}] [TeslaBookmarksAdapter] ${messageText}`);
-
-            const screenshotPath = `screenshot_completion_${this.requestId}.png`;
-            await page.screenshot({ path: screenshotPath, fullPage: true });
-            this.log('[EVENT] Screenshot taken after completion.', 'info', true);
-
-            const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
-            const cloudinaryUrl = cloudinaryUploadResult.secure_url;
-            this.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`, 'info', true);
-            console.log(`[${this.requestId}] [TeslaBookmarksAdapter] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`);
-
-            fs.unlinkSync(screenshotPath);
-
-            return { success: true, message: messageText, preSubmissionScreenshot: preSubmissionCloudinaryUrl, postSubmissionScreenshot: cloudinaryUrl };
-
-        } catch (error) {
-            this.log(`\n--- [SCRIPT ERROR] ---`, 'error', true);
-            this.log(`[ERROR] Global script error: ${error.message}`, 'error', true);
-            this.log('----------------------', 'error', true);
-            this.log('[EVENT] An error occurred.', 'error', true);
-            console.error(`[${this.requestId}] [TeslaBookmarksAdapter] An error occurred: ${error.message}`);
-            return { success: false, error: error.message };
-        } finally {
-            if (browser) {
-                await browser.close();
-                this.log('[EVENT] Browser closed after execution.', 'detail', false);
-            }
-            else {
-                this.log('[EVENT] Browser instance was not created or was null.', 'warning', true);
-            }
-        }
-    }
-}
-
-// --- PearlBookmarking Adapter ---
-class PearlBookmarkingAdapter extends BaseAdapter {
-    constructor(args) {
-        super(args);
-        this.loginUrl = 'https://pearlbookmarking.com/?success=1#tab-login';
-        this.submitUrl = 'https://pearlbookmarking.com/index.php/submit-story/';
-    }
-
-    async publish() {
-        this.log(`[EVENT] Entering PearlBookmarkingAdapter publish method.`, 'info', true);
-
-        let browser;
-        let context;
-        let page;
-
         try {
             this.log('[DEBUG] Attempting chromium.launch()...', 'detail', false);
             browser = await chromium.launch({ headless: true });
@@ -1057,7 +905,7 @@ class PearlBookmarkingAdapter extends BaseAdapter {
             this.log('[EVENT] Browser launched successfully.', 'info', false);
             context = await browser.newContext();
             page = await context.newPage();
-            page.setDefaultTimeout(60000);
+            page.setDefaultTimeout(40000);
 
             // Step 1: Login
             this.log(`[EVENT] Navigating to login page: ${this.loginUrl}`, 'detail', false);
@@ -1065,16 +913,27 @@ class PearlBookmarkingAdapter extends BaseAdapter {
             this.log('[EVENT] Navigation to login page complete.', 'detail', false);
 
             this.log('[EVENT] Filling login form...', 'detail', false);
-            await page.locator('input[name="username"]').fill(this.website.credentials.username);
-            await page.locator('input[name="password"]').fill(this.website.credentials.password);
-            await page.locator('input[name="captcha"]').fill('2'); // Captcha is always 2
+            const username = this.website.credentials.username;
+            const password = this.website.credentials.password;
+            // Fill login form for both sites
+            const usernameSelector = 'input[name="log"]';
+            const passwordSelector = 'input[name="pwd"]';
+            if (typeof username === 'string' && username.trim() !== '') {
+                await page.locator(usernameSelector).fill(username, { timeout: 10000 });
+            } else {
+                this.log('[WARNING] Username is missing or empty, skipping fill.', 'warning', true);
+            }
+            if (typeof password === 'string' && password.trim() !== '') {
+                await page.locator(passwordSelector).fill(password, { timeout: 10000 });
+            } else {
+                this.log('[WARNING] Password is missing or empty, skipping fill.', 'warning', true);
+            }
             this.log('[EVENT] Login form filled. Clicking login button...', 'detail', false);
-            
             await Promise.all([
                 page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-                page.locator('input[type="submit"][value="Login"]').click()
+                page.locator('input[type="submit"][name="wp-submit"]').click()
             ]);
-            this.log('[EVENT] Login successful, navigated to new page.', 'detail', false);
+            this.log('[EVENT] Login successful.', 'detail', false);
 
             // Step 2: Navigate to submission page
             this.log(`[EVENT] Navigating to submission page: ${this.submitUrl}`, 'detail', false);
@@ -1083,42 +942,97 @@ class PearlBookmarkingAdapter extends BaseAdapter {
 
             // Step 3: Fill submission form
             this.log('[EVENT] Filling submission form...', 'detail', false);
-            await page.locator('input[name="submit_url"]').fill(this.content.url || this.website.url);
-            await page.locator('input[name="submit_title"]').fill(this.content.title);
-            await page.locator('textarea[name="submit_body"]').fill(this.content.body);
+            const url = this.content.url || this.website.url;
+            const title = this.content.title;
+            const body = this.content.body;
+            const urlSelector =  'input[name="_story_url"]';
+            const titleSelector =  'input[name="title"]';
+            const bodySelector = 'textarea[name="description"]';
+            if (typeof url === 'string' && url.trim() !== '') {
+                await page.locator(urlSelector).fill(url, { timeout: 10000 });
+            } else {
+                this.log('[WARNING] Submission URL is missing or empty, skipping fill.', 'warning', true);
+            }
+            if (typeof title === 'string' && title.trim() !== '') {
+                await page.locator(titleSelector).fill(title, { timeout: 10000 });
+            } else {
+                this.log('[WARNING] Submission title is missing or empty, skipping fill.', 'warning', true);
+            }
+            if (typeof body === 'string' && body.trim() !== '') {
+                await page.locator(bodySelector).fill(body, { timeout: 10000 });
+            } else {
+                this.log('[WARNING] Submission body is missing or empty, skipping fill.', 'warning', true);
+            }
+            // Select correct category
+            const categoryValue = this.website.url.includes('pearlbookmarking.com') ? '2152' : '87550';
+            await page.locator('select[name="story_category"]').selectOption({ value: categoryValue });
             this.log('[EVENT] Submission form filled. Clicking submit button...', 'detail', false);
 
             // Step 4: Submit the story
-            await Promise.all([
-                page.waitForResponse(response => response.url().includes('/submit-story/') && response.status() === 200),
-                page.locator('input[type="submit"][name="submit"]').click()
-            ]);
+            await page.locator('input[type="submit"][name="submit"]').click();
+            await page.waitForTimeout(2000); // Wait for possible redirect
+            const currentUrlCheck = page.url();
+            // Check for TeslaBookmarks duplicate submission in review
+            if (
+                currentUrlCheck === 'https://teslabookmarks.com/index.php/submit-story/' &&
+                this.website.url.includes('teslabookmarks.com')
+            ) {
+                // Look for the error div
+                const errorDiv = await page.locator('div.alert.alert-danger').first();
+                if (await errorDiv.isVisible()) {
+                    const errorText = await errorDiv.textContent();
+                    if (errorText && errorText.includes('The url is already been submitted, but this story is pending review')) {
+                        // Treat as successful submission in review
+                        const reviewScreenshotPath = `review_screenshot_${this.requestId}.png`;
+                        await page.screenshot({ path: reviewScreenshotPath, fullPage: true });
+                        this.log(`[EVENT] Bookmark is in review (duplicate detected). Screenshot taken.`, 'info', true);
+                        const cloudinaryReviewUploadResult = await cloudinary.uploader.upload(reviewScreenshotPath);
+                        const reviewCloudinaryUrl = cloudinaryReviewUploadResult.secure_url;
+                        fs.unlinkSync(reviewScreenshotPath);
+                        return { success: true, message: 'Bookmark is in review (duplicate detected).', reviewUrl: currentUrlCheck, reviewScreenshot: reviewCloudinaryUrl };
+                    }
+                }
+            }
+            const reviewUrlCheck = this.reviewUrl;
+            if (currentUrlCheck.startsWith(reviewUrlCheck)) {
+                const reviewScreenshotPath = `review_screenshot_${this.requestId}.png`;
+                await page.screenshot({ path: reviewScreenshotPath, fullPage: true });
+                this.log(`[EVENT] Bookmark is in review. Redirected to: ${currentUrlCheck}`, 'info', true);
+                this.log('[EVENT] Screenshot taken for review status.', 'info', true);
+                const cloudinaryReviewUploadResult = await cloudinary.uploader.upload(reviewScreenshotPath);
+                const reviewCloudinaryUrl = cloudinaryReviewUploadResult.secure_url;
+                fs.unlinkSync(reviewScreenshotPath);
+                return { success: true, message: 'Bookmark is in review.', reviewUrl: currentUrlCheck, reviewScreenshot: reviewCloudinaryUrl };
+            }
+            // If not review page, fallback to waiting for network response
+            await page.waitForResponse(response => response.url().includes('/submit-story/') && response.status() === 200, { timeout: 10000 });
             this.log('[EVENT] Submit button clicked. Waiting for success message.', 'detail', false);
 
-            // Step 5: Extract the posted URL
-            const successMessageSelector = 'div.alert.alert-success#msg-flash a';
-            await page.waitForSelector(successMessageSelector, { state: 'visible', timeout: 15000 });
-            const postUrl = await page.getAttribute(successMessageSelector, 'href');
-
-            if (!postUrl) {
-                this.log('Could not extract the posted URL from the success message.', 'error', true);
-                throw new Error('Could not extract the posted URL from the success message.');
+            // Step 5: Confirm submission and take final screenshot (fallback, rarely used)
+            const successMessageSelector = 'div.alert.alert-success';
+            let messageText = null;
+            let isSuccess = false;
+            try {
+                await page.waitForSelector(successMessageSelector, { state: 'visible', timeout: 15000 });
+                messageText = await page.textContent(successMessageSelector);
+                if (messageText && messageText.includes('Your story has been submitted. but your story is pending review.')) {
+                    isSuccess = true;
+                }
+            } catch (error) {
+                this.log(`[DEBUG] Primary success message not found.`, 'detail', false);
             }
-            this.log(`[SUCCESS] Submission confirmed: ${postUrl}`, 'success', true);
-
+            if (!isSuccess || !messageText) {
+                const errorMessage = 'Submission confirmation message not found or not as expected.';
+                this.log(`[ERROR] ${errorMessage}`, 'error', true);
+                throw new Error(errorMessage);
+            }
+            this.log(`[SUCCESS] Submission confirmation message: ${messageText}`, 'success', true);
             const screenshotPath = `screenshot_completion_${this.requestId}.png`;
             await page.screenshot({ path: screenshotPath, fullPage: true });
-            this.log('[EVENT] Screenshot taken after submission.', 'info', true);
-
             const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
             const cloudinaryUrl = cloudinaryUploadResult.secure_url;
-            this.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`, 'info', true);
-            console.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`);
-
             fs.unlinkSync(screenshotPath);
-
-            return { success: true, postUrl: postUrl, cloudinaryUrl: cloudinaryUrl };
-
+            return { success: true, message: messageText, reviewUrl: currentUrlCheck, reviewScreenshot: cloudinaryUrl };
         } catch (error) {
             this.log(`\n--- [SCRIPT ERROR] ---`, 'error', true);
             this.log(`[ERROR] Global script error: ${error.message}`, 'error', true);
@@ -1129,8 +1043,7 @@ class PearlBookmarkingAdapter extends BaseAdapter {
             if (browser) {
                 await browser.close();
                 this.log('[EVENT] Browser closed after execution.', 'detail', false);
-            }
-            else {
+            } else {
                 this.log('[EVENT] Browser instance was not created or was null.', 'warning', true);
             }
         }
@@ -1157,7 +1070,7 @@ class GainWebAdapter extends BaseAdapter {
             this.log('[DEBUG] Chromium launched.', 'detail', false);
             context = await browser.newContext();
             page = await context.newPage();
-            page.setDefaultTimeout(60000);
+            page.setDefaultTimeout(10000);
 
             this.log(`[EVENT] Navigating to submission page: ${this.submitUrl}`, 'detail', false);
             await page.goto(this.submitUrl, { waitUntil: 'domcontentloaded' });
@@ -1293,7 +1206,7 @@ class SocialSubmissionEngineAdapter extends BaseAdapter {
             this.log('[DEBUG] Chromium launched.', 'detail', false);
             context = await browser.newContext();
             page = await context.newPage();
-            page.setDefaultTimeout(60000);
+            page.setDefaultTimeout(10000);
 
             this.log(`[EVENT] Navigating to submission page: ${this.submitUrl}`, 'detail', false);
             await page.goto(this.submitUrl, { waitUntil: 'domcontentloaded' });
@@ -1618,8 +1531,7 @@ const adapterMap = {
     '../controllers/social_media/facebookController.js': FacebookAdapter,
     '../controllers/social_media/instagramController.js': InstagramAdapter,
     '../controllers/bookmarking/bookmarkZooController.js': BookmarkZooAdapter,
-    '../controllers/bookmarking/teslaBookmarksController.js': TeslaBookmarksAdapter,
-    '../controllers/bookmarking/pearlBookmarkingController.js': PearlBookmarkingAdapter,
+    '../controllers/bookmarking/teslaBookmarksController.js': TeslaPearlBookmarkingAdapter,
     'directory/gainweb': GainWebAdapter,
     'directory/socialsubmissionengine': SocialSubmissionEngineAdapter,
     'directory': GainWebAdapter,
