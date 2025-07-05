@@ -900,7 +900,7 @@ class TeslaPearlBookmarkingAdapter extends BaseAdapter {
         let page;
         try {
             this.log('[DEBUG] Attempting chromium.launch()...', 'detail', false);
-            browser = await chromium.launch({ headless: false });
+            browser = await chromium.launch({ headless: true });
             this.log('[DEBUG] chromium.launch() completed.', 'detail', false);
             this.log('[EVENT] Browser launched successfully.', 'info', false);
             context = await browser.newContext();
