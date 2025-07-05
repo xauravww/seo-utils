@@ -900,7 +900,7 @@ class TeslaPearlBookmarkingAdapter extends BaseAdapter {
         let page;
         try {
             this.log('[DEBUG] Attempting chromium.launch()...', 'detail', false);
-            browser = await chromium.launch({ headless: true });
+            browser = await chromium.launch({ headless: false });
             this.log('[DEBUG] chromium.launch() completed.', 'detail', false);
             this.log('[EVENT] Browser launched successfully.', 'info', false);
             context = await browser.newContext();
@@ -972,29 +972,26 @@ class TeslaPearlBookmarkingAdapter extends BaseAdapter {
             await page.locator('input[type="submit"][name="submit"]').click();
             await page.waitForTimeout(2000); // Wait for possible redirect
             const currentUrlCheck = page.url();
-            // Check for TeslaBookmarks duplicate submission in review
-            if (
-                currentUrlCheck === 'https://teslabookmarks.com/index.php/submit-story/' &&
-                this.website.url.includes('teslabookmarks.com')
-            ) {
-                // Look for the error div
-                const errorDiv = await page.locator('div.alert.alert-danger').first();
-                if (await errorDiv.isVisible()) {
-                    const errorText = await errorDiv.textContent();
-                    if (errorText && errorText.includes('The url is already been submitted, but this story is pending review')) {
-                        // Treat as successful submission in review
-                        const reviewScreenshotPath = `review_screenshot_${this.requestId}.png`;
-                        await page.screenshot({ path: reviewScreenshotPath, fullPage: true });
-                        this.log(`[EVENT] Bookmark is in review (duplicate detected). Screenshot taken.`, 'info', true);
-                        const cloudinaryReviewUploadResult = await cloudinary.uploader.upload(reviewScreenshotPath);
-                        const reviewCloudinaryUrl = cloudinaryReviewUploadResult.secure_url;
-                        fs.unlinkSync(reviewScreenshotPath);
-                        return { success: true, message: 'Bookmark is in review (duplicate detected).', reviewUrl: currentUrlCheck, reviewScreenshot: reviewCloudinaryUrl };
-                    }
+
+            // --- NEW: Immediately check for duplicate error or review/`story.php` URL ---
+            // 1. Check for error message
+            const errorDiv = await page.locator('div.alert.alert-danger').first();
+            let errorText = null;
+            if (await errorDiv.isVisible()) {
+                errorText = await errorDiv.textContent();
+                if (errorText && errorText.includes('The url is already been submitted, but this story is pending review')) {
+                    // Take screenshot and return immediately
+                    const reviewScreenshotPath = `review_screenshot_${this.requestId}.png`;
+                    await page.screenshot({ path: reviewScreenshotPath, fullPage: true });
+                    this.log(`[EVENT] Bookmark is in review (duplicate detected). Screenshot taken.`, 'info', true);
+                    const cloudinaryReviewUploadResult = await cloudinary.uploader.upload(reviewScreenshotPath);
+                    const reviewCloudinaryUrl = cloudinaryReviewUploadResult.secure_url;
+                    fs.unlinkSync(reviewScreenshotPath);
+                    return { success: true, message: 'Bookmark is in review (duplicate detected).', reviewUrl: currentUrlCheck, reviewScreenshot: reviewCloudinaryUrl };
                 }
             }
-            const reviewUrlCheck = this.reviewUrl;
-            if (currentUrlCheck.startsWith(reviewUrlCheck)) {
+            // 2. Check for review/`story.php`-type URL
+            if (currentUrlCheck.includes('story.php') || currentUrlCheck.startsWith(this.reviewUrl)) {
                 const reviewScreenshotPath = `review_screenshot_${this.requestId}.png`;
                 await page.screenshot({ path: reviewScreenshotPath, fullPage: true });
                 this.log(`[EVENT] Bookmark is in review. Redirected to: ${currentUrlCheck}`, 'info', true);
@@ -1004,6 +1001,8 @@ class TeslaPearlBookmarkingAdapter extends BaseAdapter {
                 fs.unlinkSync(reviewScreenshotPath);
                 return { success: true, message: 'Bookmark is in review.', reviewUrl: currentUrlCheck, reviewScreenshot: reviewCloudinaryUrl };
             }
+            // --- END NEW LOGIC ---
+
             // If not review page, fallback to waiting for network response
             await page.waitForResponse(response => response.url().includes('/submit-story/') && response.status() === 200, { timeout: 10000 });
             this.log('[EVENT] Submit button clicked. Waiting for success message.', 'detail', false);
