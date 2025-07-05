@@ -987,6 +987,8 @@ class TeslaPearlBookmarkingAdapter extends BaseAdapter {
                     const cloudinaryReviewUploadResult = await cloudinary.uploader.upload(reviewScreenshotPath);
                     const reviewCloudinaryUrl = cloudinaryReviewUploadResult.secure_url;
                     fs.unlinkSync(reviewScreenshotPath);
+                    // Ensure browser is closed AFTER screenshot/upload
+                    if (browser) { await browser.close(); this.log('[EVENT] Browser closed after execution.', 'detail', false); }
                     return { success: true, message: 'Bookmark is in review (duplicate detected).', reviewUrl: currentUrlCheck, reviewScreenshot: reviewCloudinaryUrl };
                 }
             }
@@ -999,6 +1001,8 @@ class TeslaPearlBookmarkingAdapter extends BaseAdapter {
                 const cloudinaryReviewUploadResult = await cloudinary.uploader.upload(reviewScreenshotPath);
                 const reviewCloudinaryUrl = cloudinaryReviewUploadResult.secure_url;
                 fs.unlinkSync(reviewScreenshotPath);
+                // Ensure browser is closed AFTER screenshot/upload
+                if (browser) { await browser.close(); this.log('[EVENT] Browser closed after execution.', 'detail', false); }
                 return { success: true, message: 'Bookmark is in review.', reviewUrl: currentUrlCheck, reviewScreenshot: reviewCloudinaryUrl };
             }
             // --- END NEW LOGIC ---
