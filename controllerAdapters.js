@@ -229,15 +229,16 @@ class PingMyLinksAdapter extends BaseAdapter {
             'pingmylinks/searchsubmission': 'https://www.pingmylinks.com/addurl/searchsubmission/',
             'pingmylinks/socialsubmission': 'https://www.pingmylinks.com/addurl/socialsubmission/',
         };
+        
     }
 
     async publish() {
         this.log('[EVENT] Entering PingMyLinksAdapter publish method.', 'info', true);
         
-        // Determine the target PingMyLinks URL based on the category
-        const targetPingUrl = this.pingUrls[this.website.category];
+        // Determine the target PingMyLinks URL based on the name
+        const targetPingUrl = this.pingUrls[this.website.name];
         if (!targetPingUrl) {
-            throw new Error(`Unsupported PingMyLinks category: ${this.website.category}`);
+            throw new Error(`Unsupported PingMyLinks name: ${this.website.name}`);
         }
 
         let browser;
@@ -300,8 +301,14 @@ class PingMyLinksAdapter extends BaseAdapter {
             try {
                 await furlInput.waitFor({ state: 'visible', timeout: 10000 });
                 this.log('[EVENT] Filling URL input field...', 'detail', false);
-                // Use the URL from this.website.url (the URL to be pinged)
-                await furlInput.fill(this.website.url);
+                // Use the user's public_website_1 if available, otherwise fallback to this.website.url
+                let urlToPing = null;
+                if (this.content && this.content.url) {
+                    urlToPing = this.content.url;
+                } else {
+                    urlToPing = this.website.url;
+                }
+                await furlInput.fill(urlToPing);
                 this.log('[EVENT] URL input field filled.', 'detail', false);
             } catch (error) {
                 this.log(`[ERROR] Failed to locate or fill URL input field: ${error.message}`, 'error', true);
@@ -1527,6 +1534,12 @@ class TumblrAdapter extends BaseAdapter {
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
     '../controllers/ping/pingMyLinksController.js': PingMyLinksAdapter,
+    'pingmylinks/googleping': PingMyLinksAdapter,
+    'pingmylinks/searchsubmission': PingMyLinksAdapter,
+    'pingmylinks/socialsubmission': PingMyLinksAdapter,
+    'https://www.pingmylinks.com/googleping': PingMyLinksAdapter,
+    'https://www.pingmylinks.com/addurl/socialsubmission': PingMyLinksAdapter,
+    'https://www.pingmylinks.com/addurl/searchsubmission': PingMyLinksAdapter,
     '../controllers/search/secretSearchEngineLabsController.js': SecretSearchEngineLabsAdapter,
     '../controllers/search/activeSearchResultsController.js': ActiveSearchResultsAdapter,
     '../controllers/redditController.js': RedditAdapter,
@@ -1561,6 +1574,12 @@ export const getAdapter = (jobDetails) => {
     // Fallback: try matching by category
     if (jobDetails.website.category && adapterMap[jobDetails.website.category]) {
         const AdapterClass = adapterMap[jobDetails.website.category];
+        return new AdapterClass(jobDetails);
+    }
+
+    // NEW: Fallback: try matching by full URL
+    if (jobDetails.website.url && adapterMap[jobDetails.website.url]) {
+        const AdapterClass = adapterMap[jobDetails.website.url];
         return new AdapterClass(jobDetails);
     }
 

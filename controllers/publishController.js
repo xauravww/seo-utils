@@ -215,8 +215,10 @@ const bullWorker = new BullWorker('publishQueue', async (job) => {
 
 export const publish = async (req, res) => {
     const requestId = uuidv4();
+    console.log("req. id to send:",requestId)
     console.log("req.body in publish: " , req.body)
     await publishQueue.add('publish', { reqBody: req.body, requestId });
+
     res.status(202).json({
         message: 'Request received. Processing will start shortly (queued).',
         requestId: requestId
