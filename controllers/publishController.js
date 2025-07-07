@@ -116,8 +116,10 @@ async function processPublishJob(reqBody, requestId) {
         websocketLogger.log(requestId, `❌ Missing user_id or campaign_id. Cannot proceed with campaign update.`, 'error');
         console.error(`[${requestId}] Missing user_id or campaign_id. Campaign update will be skipped.`);
     }
+    // --- Title logic: prefer parsedContent.title if it exists and is non-empty ---
+    let finalTitle = title && title.trim() && title !== 'Untitled' ? title : (parsedContent.title && parsedContent.title.trim() ? parsedContent.title : 'Untitled');
     workerContent = {
-        title: title || parsedContent.title || 'No Title',
+        title: finalTitle,
         url: (info && info.user && info.user.public_website_1) ? info.user.public_website_1 : (parsedContent.url || ''),
         tags: parsedContent.tags || '',
         description: parsedContent.description || parsedContent.markdown || parsedContent.html || '',

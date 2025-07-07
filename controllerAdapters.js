@@ -1606,7 +1606,7 @@ class CityDataForumAdapter extends BaseAdapter {
         let browser;
         let page;
         try {
-            browser = await chromium.launch({ headless: true });
+            browser = await chromium.launch({ headless: false });
             const context = await browser.newContext();
             page = await context.newPage();
             await page.route('**/*google-analytics.com*', (route) => route.abort());
