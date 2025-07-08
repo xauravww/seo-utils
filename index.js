@@ -116,7 +116,7 @@ for (const cat of categories) {
                 updatePayload.logs[category] = JSON.stringify(message.categorizedLogs[category]);
               }
             }
-            const authToken = 'HcjBqsJjLpi0bbg4jbtoi484hfuh9u3ufh98'; // REPLACE WITH ACTUAL TOKEN RETRIEVAL
+            const authToken = process.env.UTIL_TOKEN ; // REPLACE WITH ACTUAL TOKEN RETRIEVAL
             const apiResponse = await axios.put(apiUpdateUrl, updatePayload, {
               headers: {
                 'accept': 'application/json',
