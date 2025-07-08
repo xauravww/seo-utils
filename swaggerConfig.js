@@ -72,6 +72,10 @@ const swaggerDefinition = {
     {
       name: 'Bloglovin',
       description: 'API for posting to Bloglovin.',
+    },
+    {
+      name: 'BullMQ',
+      description: 'Admin endpoints for BullMQ queue and worker management/monitoring. Includes /admin/queues/worker-health, /admin/queues/remove-active, and /admin/queues/remove-active-ui.'
     }
   ]
 };
@@ -79,7 +83,7 @@ const swaggerDefinition = {
 const options = {
   swaggerDefinition,
   // Paths to files containing OpenAPI definitions
-  apis: ['./routes/*.js'],
+  apis: ['./routes/*.js', './index.js'],
 };
 
 const swaggerSpec = swaggerJSDoc(options);

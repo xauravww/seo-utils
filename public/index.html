@@ -44,6 +44,12 @@
         <div class="log-entry">Waiting for submission...</div>
     </div>
 
+    <h2>Live Log Viewer</h2>
+    <label for="requestIdInput">Request ID:</label>
+    <input type="text" id="requestIdInput" placeholder="Enter requestId" />
+    <button id="connectBtn">Connect & Subscribe</button>
+    <div id="logContainer" style="white-space: pre-wrap; margin-top: 1em;"></div>
+
     <script>
         document.getElementById('post-form').addEventListener('submit', async function (e) {
             e.preventDefault();
@@ -148,6 +154,35 @@
                 logsContainer.innerHTML += `<div class="log-entry log-error">Failed to submit request: ${error.message}</div>`;
             }
         });
+
+        let ws;
+        let isConnected = false;
+        document.getElementById('connectBtn').onclick = function() {
+          const requestId = document.getElementById('requestIdInput').value.trim();
+          if (!requestId) {
+            alert('Please enter a requestId');
+            return;
+          }
+          if (ws && isConnected) {
+            ws.close();
+          }
+          ws = new WebSocket('ws://' + window.location.hostname + ':3001/');
+          ws.onopen = function() {
+            ws.send(JSON.stringify({ type: 'subscribe', requestId }));
+            isConnected = true;
+            document.getElementById('logContainer').textContent = 'Subscribed to logs for requestId: ' + requestId + '\n';
+          };
+          ws.onmessage = function(event) {
+            document.getElementById('logContainer').textContent += event.data + '\n';
+          };
+          ws.onclose = function() {
+            isConnected = false;
+            document.getElementById('logContainer').textContent += '\n[WebSocket closed]\n';
+          };
+          ws.onerror = function(err) {
+            document.getElementById('logContainer').textContent += '\n[WebSocket error]\n';
+          };
+        };
     </script>
 </body>
 </html> 

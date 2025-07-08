@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Active Jobs - Live Monitor</title>
+</head>
+<body>
+  <h2>Active BullMQ Jobs</h2>
+  <table border="1" cellpadding="5" id="jobsTable">
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Job ID</th>
+        <th>Request ID</th>
+        <th>Copy</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <script>
+    async function fetchJobs() {
+      const res = await fetch('/api/active-jobs');
+      const jobs = await res.json();
+      const tbody = document.querySelector('#jobsTable tbody');
+      tbody.innerHTML = '';
+      for (const job of jobs) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${job.category}</td>
+          <td>${job.jobId}</td>
+          <td>${job.requestId}</td>
+          <td><button onclick="navigator.clipboard.writeText('${job.requestId}')">Copy</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+    fetchJobs();
+    setInterval(fetchJobs, 3000);
+  </script>
+</body>
+</html> 

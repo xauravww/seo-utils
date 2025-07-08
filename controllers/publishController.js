@@ -4,7 +4,7 @@ import { Worker } from 'worker_threads';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios'; // Import axios for making API requests
-import { Queue, Worker as BullWorker } from 'bullmq';
+import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -16,7 +16,35 @@ const __dirname = path.dirname(__filename);
 // Redis connection for BullMQ
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
-const publishQueue = new Queue('publishQueue', { connection });
+
+// Define all main categories
+const categories = [
+  'blog',
+  'article',
+  'forum',
+  'social_media',
+  'search',
+  'ping',
+  'classified',
+  'bookmarking',
+  'directory',
+  'other'
+];
+
+// Create a BullMQ queue for each category
+const queues = {};
+categories.forEach(cat => {
+  queues[cat] = new Queue(`${cat}Queue`, { connection });
+});
+
+// Helper to get the correct queue by category
+function getQueueByCategory(category) {
+  const cat = (category || '').toLowerCase().trim();
+  if (!queues[cat]) {
+    console.warn(`[BullMQ] Unknown category "${category}" (normalized: "${cat}"), using 'other' queue.`);
+  }
+  return queues[cat] || queues['other'];
+}
 
 const queueConcurrency = parseInt(process.env.QUEUE_CONCURRENCY, 10) || 1;
 
@@ -141,18 +169,44 @@ async function processPublishJob(reqBody, requestId) {
 
 // BullMQ Worker will be set up in a separate file (publishQueueWorker.js)
 
-export { publishQueue };
-export { processPublishJob };
+export { queues, getQueueByCategory, categories, processPublishJob };
 
 export const publish = async (req, res) => {
     const requestId = uuidv4();
     console.log("req. id to send:",requestId)
-    // console.log("req.body in publish: " , req.body)
-    // Add job to BullMQ queue
-    await publishQueue.add('publish', { reqBody: req.body, requestId });
+    // Add a job to BullMQ queue for each eligible website
+    let originalCategory = req.body.category;
+    if (!originalCategory && req.body.info && req.body.info.category) {
+      originalCategory = req.body.info.category;
+    }
+    if (!originalCategory && req.body.info && req.body.info.websites && req.body.info.websites[0] && req.body.info.websites[0].category) {
+      originalCategory = req.body.info.websites[0].category;
+    }
+    const normalizedCategory = (originalCategory || '').toLowerCase().trim();
+    console.log('[BullMQ] Submitting jobs with category:', originalCategory, 'normalized:', normalizedCategory);
+    const queue = getQueueByCategory(originalCategory);
 
-    res.status(202).json({
-        message: 'Request received. Processing will start shortly (queued).',
+    // Use processPublishJob to get eligible websites and job data
+    const jobData = await processPublishJob(req.body, requestId);
+    if (jobData && jobData.websites && Array.isArray(jobData.websites) && jobData.websites.length > 0) {
+      for (const website of jobData.websites) {
+        await queue.add('publishWebsite', {
+          requestId, // unique per job for traceability
+          website,
+          content: jobData.content,
+          campaignId: jobData.campaignId,
+          userId: jobData.userId,
+          minimumInclude: jobData.minimumInclude
+        });
+      }
+      res.status(202).json({
+        message: `Request received. ${jobData.websites.length} jobs queued (one per website).`,
         requestId: requestId
-    });
+      });
+    } else {
+      res.status(400).json({
+        message: 'No eligible websites found for publication.',
+        requestId: requestId
+      });
+    }
 };

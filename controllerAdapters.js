@@ -19,6 +19,7 @@ import { postToFacebook } from './controllers/social_media/facebookController.js
 import { postToInstagram } from './controllers/social_media/instagramController.js';
 import { UBookmarkingAdapter } from './controllers/bookmarking/ubookmarkingController.js';
 import { OAuth } from 'oauth';
+import IORedis from 'ioredis';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -32,15 +33,21 @@ cloudinary.config({
 
 chromium.use(StealthPlugin());
 
+const redisPublisher = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
+function publishLog(requestId, message, level = 'info') {
+  const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
+  redisPublisher.publish(`logs:${requestId}`, payload);
+}
+
 // --- Base Adapter Class (for potential future extension) ---
 class BaseAdapter {
-    constructor({ requestId, website, content }) {
+    constructor({ requestId, website, content, job }) {
         this.requestId = requestId;
         this.website = website; // Contains url, category, and credentials
         this.content = content;
-        // Credentials are now located at this.website.credentials
         this.category = website.category; // Store category directly for easy access
         this.collectedLogs = []; // Array to store logs for this specific adapter instance
+        this.job = job; // BullMQ job instance, if provided
     }
 
     log(message, level = 'detail', isProductionLog = false) {
@@ -51,7 +58,10 @@ class BaseAdapter {
 
         // Only send to websocketLogger if isProductionLog is true OR if not in production environment
         if (isProductionLog || process.env.NODE_ENV !== 'production') {
-            websocketLogger.log(this.requestId, formattedMessage, level);
+            publishLog(this.requestId, formattedMessage, level);
+        }
+        if (this.job && typeof this.job.log === 'function') {
+            this.job.log(formattedMessage);
         }
     }
 
