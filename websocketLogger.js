@@ -68,8 +68,8 @@ export function log(requestId, data) {
   const client = clientMap.get(requestId);
 
   // Debug: Show all current subscriptions and the requestId being logged to
-  console.log('All current subscriptions:', Array.from(clientMap.keys()));
-  console.log('Log requested for requestId:', requestId);
+  // console.log('All current subscriptions:', Array.from(clientMap.keys()));
+  // console.log('Log requested for requestId:', requestId);
 
   if (client && client.readyState === client.OPEN) {
     const payload = typeof data === 'object' && data !== null && !Array.isArray(data)
@@ -80,9 +80,9 @@ export function log(requestId, data) {
     console.log(`[${requestId}] ${logMessageForConsole}`); // Log to console as well
     
     client.send(JSON.stringify(payload));
-    console.log(`[${requestId}] Log sent to client.`);
+    // console.log(`[${requestId}] Log sent to client.`);
   } else {
-    console.log(`[${requestId}] No open WebSocket client found for this requestId.`);
+    // console.log(`[${requestId}] No open WebSocket client found for this requestId.`);
   }
 } 
 
