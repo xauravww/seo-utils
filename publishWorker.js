@@ -195,8 +195,12 @@ const startAllCategoryWorkers = () => {
           const { website, content, campaignId, userId, minimumInclude, requestId: reqId } = job.data;
           requestId = reqId;
           await job.log(`[BullMQ] [${category}] Starting job ${job.id} (requestId: ${requestId})`);
-          // FIX: Pass a single website object to processWebsite
-          return await processWebsite({ requestId, website, content, campaignId }, job);
+          const result = await processWebsite({ requestId, website, content, campaignId }, job);
+          return {
+            status: result.success ? 'done' : 'error',
+            categorizedLogs: { [result.category]: result.adapterLogs },
+            ...result
+          };
         }
         // Call processWebsite with job instance
         // return await processWebsite(jobData, job); // <-- Remove this line

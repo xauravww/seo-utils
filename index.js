@@ -22,9 +22,34 @@ import os from 'os';
 import { exec } from 'child_process';
 import * as websocketLogger from './websocketLogger.js';
 import { Job } from 'bullmq';
+import IORedis from 'ioredis';
+import axios from 'axios';
+const redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
 
 dotenv.config();
 loadSessions(); // Load sessions from file on startup
+
+// When jobs are created, add their jobIds to a Redis set keyed by campaign_id
+// (This should be done where jobs are added, but for now, add a helper for use in publishController.js)
+export async function trackCampaignJob(campaignId, jobId) {
+  if (campaignId && jobId) {
+    await redis.sadd(`campaign_jobs:${campaignId}`, jobId);
+  }
+}
+
+// Helper to set total jobs for a campaign
+export async function setCampaignTotalJobs(campaignId, total) {
+  if (campaignId && total) {
+    await redis.set(`campaign_total:${campaignId}`, total);
+  }
+}
+
+// Helper to increment success count for a campaign
+export async function incrementCampaignSuccess(campaignId) {
+  if (campaignId) {
+    await redis.incr(`campaign_success:${campaignId}`);
+  }
+}
 
 const app = express();
 const server = createServer(app); // Create an HTTP server
@@ -47,18 +72,77 @@ for (const cat of categories) {
   const queueName = `${cat}Queue`;
   const queueEvents = new QueueEvents(queueName, { connection: queues[cat].client });
 
-  // Helper to get requestId from jobId
-  async function getRequestIdForJob(jobId) {
+  // Helper to get requestId, campaignId, userId, etc. from jobId
+  async function getJobData(jobId) {
     try {
       const job = await queues[cat].getJob(jobId);
-      return job?.data?.requestId;
+      return job?.data;
     } catch (e) {
       return undefined;
     }
   }
 
   queueEvents.on('completed', async ({ jobId, returnvalue }) => {
-    const requestId = await getRequestIdForJob(jobId);
+    const jobData = await getJobData(jobId);
+    const requestId = jobData?.requestId;
+    const campaign_id = jobData?.campaignId;
+    const user_id = jobData?.userId;
+    // Remove jobId from campaign set
+    if (campaign_id) {
+      await redis.srem(`campaign_jobs:${campaign_id}`, jobId);
+      // If job succeeded, increment success count
+      const message = returnvalue || {};
+      if (message.status === 'done') {
+        await incrementCampaignSuccess(campaign_id);
+      }
+      const remaining = await redis.scard(`campaign_jobs:${campaign_id}`);
+      if (remaining === 0) {
+        // All jobs for this campaign are done, update external API
+        const totalCount = parseInt(await redis.get(`campaign_total:${campaign_id}`) || '0', 10);
+        const successCount = parseInt(await redis.get(`campaign_success:${campaign_id}`) || '0', 10);
+        const resultString = `${successCount}/${totalCount}`;
+        const finalStatus = successCount > 0 ? 'completed' : 'failed';
+        if (campaign_id && user_id && message.categorizedLogs) {
+          try {
+            const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
+            const updatePayload = {
+              user_id: user_id,
+              logs: {},
+              status: finalStatus,
+              result: resultString,
+            };
+            for (const category in message.categorizedLogs) {
+              if (message.categorizedLogs.hasOwnProperty(category)) {
+                updatePayload.logs[category] = JSON.stringify(message.categorizedLogs[category]);
+              }
+            }
+            const authToken = 'HcjBqsJjLpi0bbg4jbtoi484hfuh9u3ufh98'; // REPLACE WITH ACTUAL TOKEN RETRIEVAL
+            const apiResponse = await axios.put(apiUpdateUrl, updatePayload, {
+              headers: {
+                'accept': 'application/json',
+                'x-util-secret': authToken,
+                'Content-Type': 'application/json',
+              }
+            });
+            websocketLogger.log(requestId, `✅ Campaign ${campaign_id} updated with categorized logs. API Response Status: ${apiResponse.status}, Result: ${resultString}`);
+            console.log(`[${requestId}] Campaign ${campaign_id} updated.`, apiResponse.data);
+          } catch (apiError) {
+            websocketLogger.log(requestId, `❌ Failed to update campaign ${campaign_id} with logs: ${apiError.message}`, 'error');
+            console.error(`[${requestId}] Error updating campaign ${campaign_id}:`, apiError.message);
+            if (apiError.response) {
+              console.error(`[${requestId}] API Error Details:`, apiError.response.data);
+            }
+          }
+        } else {
+          websocketLogger.log(requestId, `[Worker Update] Skipping campaign update: missing campaignId, userId, or categorizedLogs.`, 'warning');
+          console.log(`[${requestId}] Skipping campaign update. Missing campaignId, userId, or categorizedLogs.`);
+        }
+        // Clean up Redis keys
+        await redis.del(`campaign_jobs:${campaign_id}`);
+        await redis.del(`campaign_total:${campaign_id}`);
+        await redis.del(`campaign_success:${campaign_id}`);
+      }
+    }
     if (requestId) {
       websocketLogger.log(requestId, `[BullMQ] Job ${jobId} completed: ${JSON.stringify(returnvalue)}`, 'success');
     }
