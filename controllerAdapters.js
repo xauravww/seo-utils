@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import { chromium } from 'playwright-extra';
 import axios from 'axios';
 import { CookieJar } from 'tough-cookie';
@@ -1574,6 +1576,8 @@ class DelphiForumAdapter extends BaseAdapter {
             // Screenshot
             const screenshotPath = `screenshot_completion_${this.requestId}.png`;
             await page.screenshot({ path: screenshotPath, fullPage: true });
+            console.log('Cloudinary config at upload:', cloudinary.config());
+            console.log('Uploading file:', screenshotPath, 'Exists:', fs.existsSync(screenshotPath));
             const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
             const cloudinaryUrl = cloudinaryUploadResult.secure_url;
             fs.unlinkSync(screenshotPath);
@@ -1649,6 +1653,8 @@ class CityDataForumAdapter extends BaseAdapter {
             const finalUrl = page.url();
             const screenshotPath = `screenshot_completion_${this.requestId}.png`;
             await page.screenshot({ path: screenshotPath, fullPage: true });
+            console.log('Cloudinary config at upload:', cloudinary.config());
+            console.log('Uploading file:', screenshotPath, 'Exists:', fs.existsSync(screenshotPath));
             const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
             const cloudinaryUrl = cloudinaryUploadResult.secure_url;
             fs.unlinkSync(screenshotPath);

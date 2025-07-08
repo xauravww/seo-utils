@@ -9,6 +9,7 @@
     "dev": "nodemon"
   },
   "dependencies": {
+    "@bull-board/express": "^6.11.0",
     "@google-cloud/speech": "^7.1.0",
     "axios": "^1.9.0",
     "axios-cookiejar-support": "^6.0.2",

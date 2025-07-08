@@ -1,6 +1,12 @@
+import dotenv from 'dotenv';
+dotenv.config();
+console.log('Cloudinary ENV:', process.env.CLOUDINARY_CLOUD_NAME, process.env.CLOUDINARY_API_KEY, process.env.CLOUDINARY_API_SECRET);
+import { Worker as BullWorker, QueueEvents } from 'bullmq';
+import IORedis from 'ioredis';
 import { parentPort, workerData } from 'worker_threads';
 import * as websocketLogger from './websocketLogger.js';
 import { getAdapter } from './controllerAdapters.js';
+import { processPublishJob } from './controllers/publishController.js';
 
 // TODO: Import the controller adapters
 // import { getAdapter } from './controllerAdapters.js';
@@ -91,7 +97,7 @@ const processWebsite = async (jobDetails) => {
     }
 };
 
-const run = async () => {
+const run = async (workerData) => {
     const { requestId, websites, content, campaignId, minimumInclude } = workerData;
     console.log(`[${requestId}] [Worker] Background worker starting. Processing ${websites.length} websites.`);
 
@@ -139,31 +145,82 @@ const run = async () => {
     if (successCount > 0) {
         websocketLogger.log(requestId, `[Worker] Publications completed: ${successCount}/${requiredCount} for request ${requestId}.`, 'success');
         console.log(`[${requestId}] [Worker] Publications completed: ${successCount}/${requiredCount}.`);
-        if (parentPort) {
-            parentPort.postMessage({ status: 'done', results: results, categorizedLogs: categorizedLogs }); // Send back all results and categorized logs
-        } else {
-            process.exit(0);
-        }
+        // Remove parentPort.postMessage and always return the result object for BullMQ
+        return { status: 'done', results, categorizedLogs };
     } else {
         websocketLogger.log(requestId, `[Worker] No successful publications for request ${requestId}.`, 'error');
         console.error(`[${requestId}] [Worker] No successful publications.`);
-        if (parentPort) {
-            parentPort.postMessage({ status: 'error', message: 'No successful publication jobs.', categorizedLogs: categorizedLogs }); // Send back categorized logs on error as well
-        } else {
-            process.exit(1);
-        }
+        // Remove parentPort.postMessage and always return the error object for BullMQ
+        return { status: 'error', message: 'No successful publication jobs.', categorizedLogs };
     }
 };
 
-run().catch(err => {
-    // Make sure to log errors to the parent thread or a central log
-    const { requestId, campaignId } = workerData;
-    console.error(`[${requestId}] [Worker] A critical error occurred in run():`, err);
-    websocketLogger.log(requestId, `[Worker] A critical error occurred in worker's run function: ${err.message}`, 'error');
-    if (parentPort) {
-        // Send back an empty categorizedLogs or partial if an error occurred before aggregation
-        parentPort.postMessage({ status: 'error', error: err.message, categorizedLogs: {} }); 
-    } else {
-        process.exit(1);
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+
+// --- BullMQ Worker Setup ---
+const queueConcurrency = parseInt(process.env.QUEUE_CONCURRENCY, 10) || 1;
+
+const startBullWorker = () => {
+    const bullWorker = new BullWorker('publishQueue', async (job) => {
+        const { reqBody, requestId } = job.data;
+        await job.log(`[BullMQ] Starting job ${job.id} (requestId: ${requestId})`);
+        await job.log(`[BullMQ] Job data: ${JSON.stringify(reqBody).slice(0, 500)}...`);
+        try {
+            const jobData = await processPublishJob(reqBody, requestId);
+            if (!jobData || !jobData.websites) {
+                const errMsg = `[${requestId}] [Worker] Invalid job data returned from processPublishJob: ${JSON.stringify(jobData)}`;
+                console.error(errMsg);
+                await job.log(errMsg);
+                return { status: 'error', message: errMsg };
+            }
+            await job.log(`[BullMQ] Running job for requestId: ${requestId}`);
+            const result = await run(jobData);
+            await job.log(`[BullMQ] Finished job ${job.id} (requestId: ${requestId})`);
+            // Log adapter logs if present
+            if (result && result.results && Array.isArray(result.results)) {
+                for (const res of result.results) {
+                    if (res.adapterLogs && Array.isArray(res.adapterLogs)) {
+                        for (const logEntry of res.adapterLogs) {
+                            await job.log(`[AdapterLog][${logEntry.level}] ${logEntry.message}`);
+                        }
+                    }
+                }
+            }
+            // Log categorized logs if present
+            if (result && result.categorizedLogs) {
+                for (const [cat, catObj] of Object.entries(result.categorizedLogs)) {
+                    if (catObj.logs && Array.isArray(catObj.logs)) {
+                        for (const logEntry of catObj.logs) {
+                            await job.log(`[CatLog][${cat}][${logEntry.level}] ${logEntry.message}`);
+                        }
+                    }
+                }
+            }
+            return result; // Return the result object
+        } catch (err) {
+            const errMsg = `[BullMQ] Error in job ${job.id} (requestId: ${requestId}): ${err && err.stack ? err.stack : err}`;
+            console.error(errMsg);
+            await job.log(errMsg);
+            return { status: 'error', message: errMsg };
+        }
+    }, { connection, concurrency: queueConcurrency });
+
+    // Optional: Listen for job events for logging/debugging
+    const queueEvents = new QueueEvents('publishQueue', { connection });
+    queueEvents.on('completed', ({ jobId }) => {
+        console.log(`[BullMQ] Job ${jobId} completed.`);
+    });
+    queueEvents.on('failed', ({ jobId, failedReason }) => {
+        console.error(`[BullMQ] Job ${jobId} failed: ${failedReason}`);
+    });
+};
+
+// Only start the worker if this file is run directly
+if (process.env.BULLMQ_WORKER === '1' || require.main === module) {
+    startBullWorker();
+    // Keep the process alive so the worker continues polling for jobs
+    setInterval(() => {}, 1 << 30);
     }
-}); 
+
+export { startBullWorker }; 
