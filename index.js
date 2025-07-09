@@ -82,6 +82,12 @@ for (const cat of categories) {
     }
   }
 
+  // Helper to get requestId for a jobId
+  async function getRequestIdForJob(jobId) {
+    const jobData = await getJobData(jobId);
+    return jobData?.requestId || (jobData?.reqBody && jobData.reqBody.requestId);
+  }
+
   queueEvents.on('completed', async ({ jobId, returnvalue }) => {
     const jobData = await getJobData(jobId);
     const requestId = jobData?.requestId;

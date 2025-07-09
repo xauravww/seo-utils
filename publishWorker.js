@@ -196,11 +196,20 @@ const startAllCategoryWorkers = () => {
           requestId = reqId;
           await job.log(`[BullMQ] [${category}] Starting job ${job.id} (requestId: ${requestId})`);
           const result = await processWebsite({ requestId, website, content, campaignId }, job);
-          return {
-            status: result.success ? 'done' : 'error',
-            categorizedLogs: { [result.category]: result.adapterLogs },
-            ...result
-          };
+          if (result.success) {
+            return {
+              status: 'done',
+              ...result
+            };
+          } else {
+            // Explicitly mark the job as failed in BullMQ
+            await job.moveToFailed({ message: result.error || 'Adapter failed' });
+            return {
+              status: 'error',
+              message: result.error || 'Adapter failed',
+              ...result
+            };
+          }
         }
         // Call processWebsite with job instance
         // return await processWebsite(jobData, job); // <-- Remove this line
