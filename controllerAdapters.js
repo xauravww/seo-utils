@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+chromium.use(StealthPlugin())
 import axios from 'axios';
 import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
@@ -26,15 +28,15 @@ const __dirname = dirname(__filename);
 
 // Configure Cloudinary
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 const redisPublisher = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
 function publishLog(requestId, message, level = 'info') {
-  const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
-  redisPublisher.publish(`logs:${requestId}`, payload);
+    const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
+    redisPublisher.publish(`logs:${requestId}`, payload);
 }
 
 // --- Base Adapter Class (for potential future extension) ---
@@ -85,14 +87,14 @@ class BaseAdapter {
         return (async () => {
             if (page) {
                 const errorScreenshotPath = `${this.requestId}-error-screenshot.png`;
-                await page.screenshot({ path: errorScreenshotPath, fullPage: true }).catch(() => {});
+                await page.screenshot({ path: errorScreenshotPath, fullPage: true }).catch(() => { });
                 try {
                     const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                     fs.unlinkSync(errorScreenshotPath);
                     this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
-                } catch {}
+                } catch { }
             }
-            if (browser) await browser.close().catch(() => {});
+            if (browser) await browser.close().catch(() => { });
             // Rethrow to let BullMQ mark as failed
             throw error;
         })();
@@ -110,17 +112,17 @@ class WordPressAdapter extends BaseAdapter {
         // --- Basic Markdown to HTML conversion ---
         // Headings
         html = html.replace(/^###### (.*)$/gm, '<strong><em>$1</em></strong>')
-                   .replace(/^##### (.*)$/gm, '<strong>$1</strong>')
-                   .replace(/^#### (.*)$/gm, '<strong>$1</strong>')
-                   .replace(/^### (.*)$/gm, '<strong>$1</strong>')
-                   .replace(/^## (.*)$/gm, '<strong>$1</strong>')
-                   .replace(/^# (.*)$/gm, '<strong>$1</strong>');
+            .replace(/^##### (.*)$/gm, '<strong>$1</strong>')
+            .replace(/^#### (.*)$/gm, '<strong>$1</strong>')
+            .replace(/^### (.*)$/gm, '<strong>$1</strong>')
+            .replace(/^## (.*)$/gm, '<strong>$1</strong>')
+            .replace(/^# (.*)$/gm, '<strong>$1</strong>');
         // Bold **text** or __text__
         html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                   .replace(/__(.*?)__/g, '<strong>$1</strong>');
+            .replace(/__(.*?)__/g, '<strong>$1</strong>');
         // Italic *text* or _text_
         html = html.replace(/\*(.*?)\*/g, '<em>$1</em>')
-                   .replace(/_(.*?)_/g, '<em>$1</em>');
+            .replace(/_(.*?)_/g, '<em>$1</em>');
         // Links [text](url)
         html = html.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
         // Unordered lists
@@ -134,11 +136,11 @@ class WordPressAdapter extends BaseAdapter {
         let safe = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
         // Unescape allowed tags
         safe = safe.replace(/&lt;a ([^&]*)&gt;/gi, '<a $1>')
-                   .replace(/&lt;\/a&gt;/gi, '</a>');
+            .replace(/&lt;\/a&gt;/gi, '</a>');
         safe = safe.replace(/&lt;strong&gt;/gi, '<strong>')
-                   .replace(/&lt;\/strong&gt;/gi, '</strong>');
+            .replace(/&lt;\/strong&gt;/gi, '</strong>');
         safe = safe.replace(/&lt;em&gt;/gi, '<em>')
-                   .replace(/&lt;\/em&gt;/gi, '</em>');
+            .replace(/&lt;\/em&gt;/gi, '</em>');
         safe = safe.replace(/&lt;!--more--&gt;/gi, '<!--more-->');
         safe = safe.replace(/&amp;nbsp;/gi, '&nbsp;');
         safe = safe.replace(/&lt;br\/?&gt;/gi, '<br/>');
@@ -165,13 +167,13 @@ class WordPressAdapter extends BaseAdapter {
             // Use credentials from the website object
             await usernameLocator.fill(this.website.credentials.username);
             await passwordLocator.fill(this.website.credentials.password);
-            
+
             this.log('Credentials filled. Clicking submit...', 'detail', false);
             await Promise.all([
                 page.waitForNavigation({ waitUntil: 'networkidle' }),
                 page.click('input[type="submit"], button[type="submit"], #wp-submit')
             ]);
-            
+
             const newPostUrl = `${this.website.url.replace(/\/$/, '')}/new-post`;
             this.log(`Logged in. Navigating to new post page: ${newPostUrl}`, 'detail', false);
             await page.goto(newPostUrl, { waitUntil: 'domcontentloaded' });
@@ -184,7 +186,7 @@ class WordPressAdapter extends BaseAdapter {
                     return obj;
                 }, {})
             );
-            
+
             this.log(`Extracted ${cookies.length} cookies and ${Object.keys(hiddenInputs).length} hidden inputs.`, 'info', false);
             return { cookies, hiddenInputs, newPostUrl };
         } finally {
@@ -217,14 +219,14 @@ class WordPressAdapter extends BaseAdapter {
         // Extract post URL from response
         let postUrl = $('#successfully_posted_url a').attr('href');
         if (!postUrl) {
-          postUrl = $('#published-url a').attr('href');
+            postUrl = $('#published-url a').attr('href');
         }
 
         if (!postUrl) {
             this.log('Failed to find post URL in response. The page HTML will be logged for debugging.', 'error', true);
             throw new Error('Could not find the final post URL in the response page. Check logs for HTML snippet.');
         }
-        
+
         const successMessage = `Successfully extracted post URL: ${postUrl}`;
         this.log(successMessage, 'success', true);
         console.log(`[${this.requestId}] [WordPressAdapter] ${successMessage}`);
@@ -258,12 +260,12 @@ class PingMyLinksAdapter extends BaseAdapter {
             'pingmylinks/searchsubmission': 'https://www.pingmylinks.com/addurl/searchsubmission/',
             'pingmylinks/socialsubmission': 'https://www.pingmylinks.com/addurl/socialsubmission/',
         };
-        
+
     }
 
     async publish() {
         this.log('[EVENT] Entering PingMyLinksAdapter publish method.', 'info', true);
-        
+
         // Determine the target PingMyLinks URL based on the name
         const targetPingUrl = this.pingUrls[this.website.name];
         if (!targetPingUrl) {
@@ -288,34 +290,34 @@ class PingMyLinksAdapter extends BaseAdapter {
 
             this.log('[EVENT] Setting up page event listeners.', 'detail', false);
             page.on('request', request => {
-              let curlCommand = `curl \'${request.url()}\'`
-              curlCommand += ` -X ${request.method()}`;
-              const headers = request.headers();
-              for (const key in headers) {
-                const value = headers[key].replace(/'/g, "'\\''");
-                curlCommand += ` -H \'${key}: ${value}\'`
-              }
-              const postData = request.postData();
-              if (postData) {
-                curlCommand += ` --data-raw \'${postData}\'`
-                const urlMatch = postData.match(/(?:^|&)u=([^&]*)/);
-                if (urlMatch && urlMatch[1]) {
-                    const pingedUrl = decodeURIComponent(urlMatch[1]);
+                let curlCommand = `curl \'${request.url()}\'`
+                curlCommand += ` -X ${request.method()}`;
+                const headers = request.headers();
+                for (const key in headers) {
+                    const value = headers[key].replace(/'/g, "'\\''");
+                    curlCommand += ` -H \'${key}: ${value}\'`
                 }
-              }
+                const postData = request.postData();
+                if (postData) {
+                    curlCommand += ` --data-raw \'${postData}\'`
+                    const urlMatch = postData.match(/(?:^|&)u=([^&]*)/);
+                    if (urlMatch && urlMatch[1]) {
+                        const pingedUrl = decodeURIComponent(urlMatch[1]);
+                    }
+                }
             });
-          
+
             page.on('response', async response => {
-              if (response.url().includes('api.php')) {
-                try {
-                  const responseBody = await response.text();
-                  this.log(`Successfully pinged to this website: ${responseBody}`, 'success', true);
-                  console.log(`Successfully pinged to this website: ${responseBody}`);
-                } catch (e) {
-                  this.log(`Error reading API.PHP response body: ${e.message}`, 'error', true);
-                  console.error(`Error reading API.PHP response body: ${e.message}`);
+                if (response.url().includes('api.php')) {
+                    try {
+                        const responseBody = await response.text();
+                        this.log(`Successfully pinged to this website: ${responseBody}`, 'success', true);
+                        console.log(`Successfully pinged to this website: ${responseBody}`);
+                    } catch (e) {
+                        this.log(`Error reading API.PHP response body: ${e.message}`, 'error', true);
+                        console.error(`Error reading API.PHP response body: ${e.message}`);
+                    }
                 }
-              }
             });
 
             page.on('pageerror', error => {
@@ -701,7 +703,7 @@ class RedditAdapter extends BaseAdapter {
 
             this.log('[EVENT] Submitting post to Reddit...', 'detail', false);
             const postUrl = await submitRedditPost(accessToken, subreddit, title, body, username);
-            
+
             this.log(`[SUCCESS] Reddit post created successfully! URL: ${postUrl}`, 'success', true);
             return { success: true, postUrl: postUrl };
 
@@ -732,7 +734,7 @@ class TwitterAdapter extends BaseAdapter {
         try {
             this.log('[EVENT] Attempting to send tweet...', 'detail', false);
             const tweetResult = await sendTweet({ appKey, appSecret, accessToken, accessSecret }, tweetText);
-            
+
             if (tweetResult.success) {
                 this.log(`[SUCCESS] Tweet posted successfully! URL: ${tweetResult.tweetUrl}`, 'success', true);
                 return { success: true, tweetUrl: tweetResult.tweetUrl };
@@ -766,7 +768,7 @@ class FacebookAdapter extends BaseAdapter {
         try {
             this.log('[EVENT] Attempting to post to Facebook...', 'detail', false);
             const facebookPostResult = await postToFacebook({ appId, appSecret, pageAccessToken, pageId }, message);
-            
+
             if (facebookPostResult.success) {
                 this.log(`[SUCCESS] Facebook post created successfully! URL: ${facebookPostResult.postUrl}`, 'success', true);
                 return { success: true, postUrl: facebookPostResult.postUrl };
@@ -800,7 +802,7 @@ class InstagramAdapter extends BaseAdapter {
         try {
             this.log('[EVENT] Attempting to post to Instagram...', 'detail', false);
             const instagramPostResult = await postToInstagram({ pageId, accessToken }, { imageUrl, caption });
-            
+
             if (instagramPostResult.success) {
                 this.log(`[SUCCESS] Instagram post created successfully! URL: ${instagramPostResult.postUrl}`, 'success', true);
                 return { success: true, postUrl: instagramPostResult.postUrl };
@@ -981,8 +983,8 @@ class TeslaPearlBookmarkingAdapter extends BaseAdapter {
             const url = this.content.url || this.website.url;
             const title = this.content.title;
             const body = this.content.body;
-            const urlSelector =  'input[name="_story_url"]';
-            const titleSelector =  'input[name="title"]';
+            const urlSelector = 'input[name="_story_url"]';
+            const titleSelector = 'input[name="title"]';
             const bodySelector = 'textarea[name="description"]';
             if (typeof url === 'string' && url.trim() !== '') {
                 await page.locator(urlSelector).fill(url, { timeout: 10000 });
@@ -2258,50 +2260,8 @@ class BoardsIEForumAdapter extends BaseAdapter {
         let context;
         let postScreenshotUrl = '';
         try {
-            // --- Turnstile Bypass Integration with null check ---
-            const cf = new TurnstileBypass();
-            let bypass = null;
-            try {
-                bypass = await cf.solve('https://www.boards.ie/entry/signin');
-            } catch (e) {
-                this.log(`[BoardsIEForumAdapter] [WARN] turnstile-bypass failed: ${e.message}`, 'warning', true);
-            }
-            const userAgent = (bypass && bypass.userAgent) ? bypass.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-            const cookies = (bypass && bypass.cookies) ? bypass.cookies : [];
-
-            browser = await chromium.launch({ headless: true });
-            const viewport = { width: 1366 + Math.floor(Math.random()*40), height: 768 + Math.floor(Math.random()*40) };
-            context = await browser.newContext({
-                userAgent,
-                viewport,
-                locale: 'en-US',
-                timezoneId: 'Europe/Dublin',
-                geolocation: { latitude: 53.3498, longitude: -6.2603 },
-                permissions: ['geolocation'],
-            });
-            await context.setExtraHTTPHeaders({
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Upgrade-Insecure-Requests': '1',
-                'DNT': '1',
-                'Sec-CH-UA': '"Chromium";v="122", "Not:A-Brand";v="99"',
-                'Sec-CH-UA-Mobile': '?0',
-                'Sec-CH-UA-Platform': '"Windows"',
-            });
-            // Set cookies from bypass
-            if (cookies && cookies.length > 0) {
-                await context.addCookies(cookies.map(cookie => ({
-                    ...cookie,
-                    url: 'https://www.boards.ie',
-                })));
-            }
-            // Block WebRTC leaks
-            await context.addInitScript(() => {
-                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                // WebRTC leak prevention
-                if (window.RTCPeerConnection) {
-                    window.RTCPeerConnection = undefined;
-                }
-            });
+            browser = await chromium.launch({ headless: false });
+            context = await browser.newContext();
             page = await context.newPage();
             page.setDefaultTimeout(30000);
 
@@ -2322,14 +2282,19 @@ class BoardsIEForumAdapter extends BaseAdapter {
             this.log('[EVENT] Logged in successfully.', 'detail', false);
 
             // Step 4: Go to new discussion page
-            // The new discussion page is usually https://www.boards.ie/discussion/insert
+            // The new discussion page is usually https://www.boards.ie/post/discussion
             // But to be robust, go to the homepage and click 'Start a Discussion' if needed
-            await page.goto('https://www.boards.ie/discussion/insert', { waitUntil: 'domcontentloaded' });
+            await page.goto('https://www.boards.ie/post/discussion', { waitUntil: 'domcontentloaded' });
             this.log('[EVENT] Navigated to new discussion page.', 'detail', false);
+
+            // --- Cloudflare/Turnstile bypass logic ---
+            const cfBypasser = new CloudflareBypasser(page, 5, true);
+            await cfBypasser.bypass();
+            // --- End bypass logic ---
 
             // Step 5: Select category 'Internet Marketing / SEO' (value 985)
             const categorySelector = 'select#Form_CategoryID[name="CategoryID"]';
-            await page.waitForSelector(categorySelector, { timeout: 15000 });
+            await page.waitForSelector(categorySelector, { timeout: 60000 });
             await page.selectOption(categorySelector, { value: '985' });
             this.log('[EVENT] Selected category Internet Marketing / SEO.', 'detail', false);
 
@@ -2381,6 +2346,72 @@ class BoardsIEForumAdapter extends BaseAdapter {
             throw error;
         } finally {
             if (browser) await browser.close();
+        }
+    }
+}
+
+// --- CloudflareBypasser Helper ---
+class CloudflareBypasser {
+    constructor(page, maxRetries = 5, log = true) {
+        this.page = page;
+        this.maxRetries = maxRetries;
+        this.log = log;
+    }
+
+    async logMessage(msg) {
+        if (this.log) console.log(msg);
+    }
+
+    async isBypassed() {
+        const title = (await this.page.title()).toLowerCase();
+        return !title.includes('just a moment') && !title.includes('attention required');
+    }
+
+    async clickVerificationButton() {
+        try {
+            // Try to find the Turnstile/Cloudflare challenge in all frames
+            const frames = this.page.frames();
+            for (const frame of frames) {
+                const input = await frame.$('input[type="checkbox"], input[type="submit"], button');
+                if (input) {
+                    await this.logMessage('Verification input/button found in frame. Attempting to click.');
+                    await input.click();
+                    return true;
+                }
+            }
+            // Try to click the challenge button in the main page as fallback
+            const mainInput = await this.page.$('input[type="checkbox"], input[type="submit"], button');
+            if (mainInput) {
+                await this.logMessage('Verification input/button found on main page. Attempting to click.');
+                await mainInput.click();
+                return true;
+            }
+            await this.logMessage('Verification button not found.');
+            return false;
+        } catch (e) {
+            await this.logMessage(`Error clicking verification button: ${e}`);
+            return false;
+        }
+    }
+
+    async bypass() {
+        let tryCount = 0;
+        while (!(await this.isBypassed())) {
+            if (this.maxRetries > 0 && tryCount >= this.maxRetries) {
+                await this.logMessage('Exceeded maximum retries. Bypass failed.');
+                break;
+            }
+            await this.logMessage(`Attempt ${tryCount + 1}: Verification page detected. Trying to bypass...`);
+            await this.clickVerificationButton();
+            tryCount += 1;
+            await this.page.waitForTimeout(2000);
+        }
+        if (await this.isBypassed()) {
+            await this.logMessage('Bypass successful.');
+            return true;
+        } else {
+            await this.logMessage('Bypass failed.');
+            return false;
         }
     }
 }
