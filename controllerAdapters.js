@@ -2222,131 +2222,132 @@ class OpenPathshalaForumAdapter extends BaseAdapter {
 }
 
 // --- Boards.ie Forum Adapter ---
-class BoardsIEForumAdapter extends BaseAdapter {
-    async publish() {
-        this.log(`[EVENT] Starting Boards.ie forum publication for ${this.website.url}`, 'info', true);
-        const { username, password } = this.website.credentials;
-        const { title } = this.content;
-        let body = this.content.body;
-        if (!body || (!body.trim().startsWith('<') && !body.trim().endsWith('>'))) {
-            const md = this.content.markdown || body || '';
-            body = ForumAdapter.toBasicHtml(md);
-        }
-        let browser;
-        let page;
-        let context;
-        let postScreenshotUrl = '';
-        try {
-            browser = await chromium.launch({ headless: false });
-            // --- MAX CUSTOM STEALTH SETTINGS ---
-            const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-            const viewport = { width: 1366 + Math.floor(Math.random()*40), height: 768 + Math.floor(Math.random()*40) };
-            context = await browser.newContext({
-                userAgent,
-                viewport,
-                locale: 'en-US',
-                timezoneId: 'Europe/Dublin',
-                geolocation: { latitude: 53.3498, longitude: -6.2603 },
-                permissions: ['geolocation'],
-            });
-            await context.setExtraHTTPHeaders({
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Upgrade-Insecure-Requests': '1',
-                'DNT': '1',
-                'Sec-CH-UA': '"Chromium";v="122", "Not:A-Brand";v="99"',
-                'Sec-CH-UA-Mobile': '?0',
-                'Sec-CH-UA-Platform': '"Windows"',
-            });
-            // Block WebRTC leaks
-            await context.addInitScript(() => {
-                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-                // WebRTC leak prevention
-                if (window.RTCPeerConnection) {
-                    window.RTCPeerConnection = undefined;
-                }
-            });
-            page = await context.newPage();
-            page.setDefaultTimeout(30000);
+// has some bugs
+// class BoardsIEForumAdapter extends BaseAdapter {
+//     async publish() {
+//         this.log(`[EVENT] Starting Boards.ie forum publication for ${this.website.url}`, 'info', true);
+//         const { username, password } = this.website.credentials;
+//         const { title } = this.content;
+//         let body = this.content.body;
+//         if (!body || (!body.trim().startsWith('<') && !body.trim().endsWith('>'))) {
+//             const md = this.content.markdown || body || '';
+//             body = ForumAdapter.toBasicHtml(md);
+//         }
+//         let browser;
+//         let page;
+//         let context;
+//         let postScreenshotUrl = '';
+//         try {
+//             browser = await chromium.launch({ headless: true });
+//             // --- MAX CUSTOM STEALTH SETTINGS ---
+//             const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+//             const viewport = { width: 1366 + Math.floor(Math.random()*40), height: 768 + Math.floor(Math.random()*40) };
+//             context = await browser.newContext({
+//                 userAgent,
+//                 viewport,
+//                 locale: 'en-US',
+//                 timezoneId: 'Europe/Dublin',
+//                 geolocation: { latitude: 53.3498, longitude: -6.2603 },
+//                 permissions: ['geolocation'],
+//             });
+//             await context.setExtraHTTPHeaders({
+//                 'Accept-Language': 'en-US,en;q=0.9',
+//                 'Upgrade-Insecure-Requests': '1',
+//                 'DNT': '1',
+//                 'Sec-CH-UA': '"Chromium";v="122", "Not:A-Brand";v="99"',
+//                 'Sec-CH-UA-Mobile': '?0',
+//                 'Sec-CH-UA-Platform': '"Windows"',
+//             });
+//             // Block WebRTC leaks
+//             await context.addInitScript(() => {
+//                 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+//                 // WebRTC leak prevention
+//                 if (window.RTCPeerConnection) {
+//                     window.RTCPeerConnection = undefined;
+//                 }
+//             });
+//             page = await context.newPage();
+//             page.setDefaultTimeout(30000);
 
-            // Step 1: Go to login page
-            await page.goto('https://www.boards.ie/entry/signin', { waitUntil: 'domcontentloaded' });
-            this.log('[EVENT] Navigated to login page.', 'detail', false);
+//             // Step 1: Go to login page
+//             await page.goto('https://www.boards.ie/entry/signin', { waitUntil: 'domcontentloaded' });
+//             this.log('[EVENT] Navigated to login page.', 'detail', false);
 
-            // Step 2: Fill login form
-            await page.locator('input#Form_Email[name="Email"]').fill(username);
-            await page.locator('input#Form_Password[name="Password"]').fill(password);
-            this.log('[EVENT] Filled login form.', 'detail', false);
+//             // Step 2: Fill login form
+//             await page.locator('input#Form_Email[name="Email"]').fill(username);
+//             await page.locator('input#Form_Password[name="Password"]').fill(password);
+//             this.log('[EVENT] Filled login form.', 'detail', false);
 
-            // Step 3: Click login
-            await Promise.all([
-                page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-                page.locator('input#Form_SignIn[type="submit"]').click()
-            ]);
-            this.log('[EVENT] Logged in successfully.', 'detail', false);
+//             // Step 3: Click login
+//             await Promise.all([
+//                 page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+//                 page.locator('input#Form_SignIn[type="submit"]').click()
+//             ]);
+//             this.log('[EVENT] Logged in successfully.', 'detail', false);
 
-            // Step 4: Go to new discussion page
-            // The new discussion page is usually https://www.boards.ie/discussion/insert
-            // But to be robust, go to the homepage and click 'Start a Discussion' if needed
-            await page.goto('https://www.boards.ie/discussion/insert', { waitUntil: 'domcontentloaded' });
-            this.log('[EVENT] Navigated to new discussion page.', 'detail', false);
+//             // Step 4: Go to new discussion page
+//             // The new discussion page is usually https://www.boards.ie/discussion/insert
+//             // But to be robust, go to the homepage and click 'Start a Discussion' if needed
+//             await page.goto('https://www.boards.ie/discussion/insert', { waitUntil: 'domcontentloaded' });
+//             this.log('[EVENT] Navigated to new discussion page.', 'detail', false);
 
-            // Step 5: Select category 'Internet Marketing / SEO' (value 985)
-            const categorySelector = 'select#Form_CategoryID[name="CategoryID"]';
-            await page.waitForSelector(categorySelector, { timeout: 15000 });
-            await page.selectOption(categorySelector, { value: '985' });
-            this.log('[EVENT] Selected category Internet Marketing / SEO.', 'detail', false);
+//             // Step 5: Select category 'Internet Marketing / SEO' (value 985)
+//             const categorySelector = 'select#Form_CategoryID[name="CategoryID"]';
+//             await page.waitForSelector(categorySelector, { timeout: 15000 });
+//             await page.selectOption(categorySelector, { value: '985' });
+//             this.log('[EVENT] Selected category Internet Marketing / SEO.', 'detail', false);
 
-            // Step 6: Fill title
-            await page.locator('input#Form_Name[name="Name"]').fill(title);
-            this.log('[EVENT] Filled title.', 'detail', false);
+//             // Step 6: Fill title
+//             await page.locator('input#Form_Name[name="Name"]').fill(title);
+//             this.log('[EVENT] Filled title.', 'detail', false);
 
-            // Step 7: Fill body (contenteditable div)
-            // The body field is a Slate.js editor, so we need to set innerHTML
-            await page.evaluate((html) => {
-                const editable = document.querySelector('div[contenteditable="true"][data-slate-editor="true"]');
-                if (editable) {
-                    editable.innerHTML = html;
-                }
-            }, body);
-            this.log('[EVENT] Filled body.', 'detail', false);
+//             // Step 7: Fill body (contenteditable div)
+//             // The body field is a Slate.js editor, so we need to set innerHTML
+//             await page.evaluate((html) => {
+//                 const editable = document.querySelector('div[contenteditable="true"][data-slate-editor="true"]');
+//                 if (editable) {
+//                     editable.innerHTML = html;
+//                 }
+//             }, body);
+//             this.log('[EVENT] Filled body.', 'detail', false);
 
-            // Step 8: Click 'Post Discussion'
-            await Promise.all([
-                page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-                page.locator('input#Form_PostDiscussion[type="submit"]').click()
-            ]);
-            this.log('[EVENT] Submitted forum post.', 'detail', false);
+//             // Step 8: Click 'Post Discussion'
+//             await Promise.all([
+//                 page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+//                 page.locator('input#Form_PostDiscussion[type="submit"]').click()
+//             ]);
+//             this.log('[EVENT] Submitted forum post.', 'detail', false);
 
-            // Step 9: Get the URL of the posted forum
-            const postedUrl = page.url();
-            this.log(`[SUCCESS] Forum post created: ${postedUrl}`, 'success', true);
+//             // Step 9: Get the URL of the posted forum
+//             const postedUrl = page.url();
+//             this.log(`[SUCCESS] Forum post created: ${postedUrl}`, 'success', true);
 
-            // Take screenshot after posting
-            const postScreenshotPath = `screenshot_post_${this.requestId}.png`;
-            await page.screenshot({ path: postScreenshotPath, fullPage: true });
-            const postCloudinaryUploadResult = await cloudinary.uploader.upload(postScreenshotPath);
-            postScreenshotUrl = postCloudinaryUploadResult.secure_url;
-            fs.unlinkSync(postScreenshotPath);
-            this.log(`[SCREENSHOT] Post screenshot uploaded: ${postScreenshotUrl}`, 'info', true);
+//             // Take screenshot after posting
+//             const postScreenshotPath = `screenshot_post_${this.requestId}.png`;
+//             await page.screenshot({ path: postScreenshotPath, fullPage: true });
+//             const postCloudinaryUploadResult = await cloudinary.uploader.upload(postScreenshotPath);
+//             postScreenshotUrl = postCloudinaryUploadResult.secure_url;
+//             fs.unlinkSync(postScreenshotPath);
+//             this.log(`[SCREENSHOT] Post screenshot uploaded: ${postScreenshotUrl}`, 'info', true);
 
-            // Only mark as completed if no error occurred
-            return { success: true, postUrl: postedUrl, postScreenshotUrl };
-        } catch (error) {
-            this.log(`[ERROR] BoardsIEForumAdapter error: ${error.message}`, 'error', true);
-            if (page) {
-                const errorScreenshotPath = `${this.requestId}-error-screenshot.png`;
-                await page.screenshot({ path: errorScreenshotPath, fullPage: true });
-                const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
-                fs.unlinkSync(errorScreenshotPath);
-                this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
-                return { success: false, error: error.message, screenshotUrl: errorCloudinaryResult.secure_url };
-            }
-            return { success: false, error: error.message };
-        } finally {
-            if (browser) await browser.close();
-        }
-    }
-}
+//             // Only mark as completed if no error occurred
+//             return { success: true, postUrl: postedUrl, postScreenshotUrl };
+//         } catch (error) {
+//             this.log(`[ERROR] BoardsIEForumAdapter error: ${error.message}`, 'error', true);
+//             if (page) {
+//                 const errorScreenshotPath = `${this.requestId}-error-screenshot.png`;
+//                 await page.screenshot({ path: errorScreenshotPath, fullPage: true });
+//                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
+//                 fs.unlinkSync(errorScreenshotPath);
+//                 this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
+//                 return { success: false, error: error.message, screenshotUrl: errorCloudinaryResult.secure_url };
+//             }
+//             return { success: false, error: error.message };
+//         } finally {
+//             if (browser) await browser.close();
+//         }
+//     }
+// }
 
 // Adapter map declaration moved above getAdapter to fix ReferenceError
 const adapterMap = {
