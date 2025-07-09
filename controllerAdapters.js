@@ -19,6 +19,7 @@ import { postToInstagram } from './controllers/social_media/instagramController.
 import { UBookmarkingAdapter } from './controllers/bookmarking/ubookmarkingController.js';
 import { OAuth } from 'oauth';
 import IORedis from 'ioredis';
+import TurnstileBypass from 'turnstile-bypass';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,6 +77,25 @@ class BaseAdapter {
 
     async publish() {
         throw new Error('Publish method not implemented!');
+    }
+
+    // Helper to ensure BullMQ marks job as failed on error
+    handleError(error, page, browser) {
+        this.log(`[ERROR] ${this.constructor.name} error: ${error.message}`, 'error', true);
+        return (async () => {
+            if (page) {
+                const errorScreenshotPath = `${this.requestId}-error-screenshot.png`;
+                await page.screenshot({ path: errorScreenshotPath, fullPage: true }).catch(() => {});
+                try {
+                    const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
+                    fs.unlinkSync(errorScreenshotPath);
+                    this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
+                } catch {}
+            }
+            if (browser) await browser.close().catch(() => {});
+            // Rethrow to let BullMQ mark as failed
+            throw error;
+        })();
     }
 }
 
@@ -223,7 +243,7 @@ class WordPressAdapter extends BaseAdapter {
         } catch (error) {
             this.log(`Publication failed: ${error.message}`, 'error', true);
             console.error(`[${this.requestId}] [WordPressAdapter] Publication failed for ${this.website.url}:`, error.message);
-            return { success: false, error: error.message };
+            throw error;
         }
     }
 }
@@ -372,7 +392,7 @@ class PingMyLinksAdapter extends BaseAdapter {
             this.log(`[ERROR] Global script error: ${error.message}`, 'error', true);
             this.log('----------------------', 'error', true);
             this.log('[EVENT] An error occurred.', 'error', true);
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) {
                 if (page) {
@@ -506,7 +526,7 @@ class SecretSearchEngineLabsAdapter extends BaseAdapter {
             this.log(`[ERROR] Global script error: ${error.message}`, 'error', true);
             this.log('----------------------', 'error', true);
             this.log('[EVENT] An error occurred.', 'error', true);
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) {
                 await browser.close();
@@ -636,7 +656,7 @@ class ActiveSearchResultsAdapter extends BaseAdapter {
                 this.log(`[ERROR] Global script error: ${error.message}`, 'error', true);
                 this.log('----------------------', 'error', true);
                 this.log('[EVENT] An error occurred.', 'error', true);
-                return { success: false, error: error.message };
+                throw error;
             }
 
         } catch (error) {
@@ -644,7 +664,7 @@ class ActiveSearchResultsAdapter extends BaseAdapter {
             this.log(`[ERROR] Global script error: ${error.message}`, 'error', true);
             this.log('----------------------', 'error', true);
             this.log('[EVENT] An error occurred.', 'error', true);
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) {
                 await browser.close();
@@ -671,7 +691,7 @@ class RedditAdapter extends BaseAdapter {
         if (!clientId || !clientSecret || !username || !password || !subreddit || !title || !body) {
             const errorMessage = 'Missing required Reddit credentials or content fields.';
             this.log(`[ERROR] ${errorMessage}`, 'error', true);
-            return { success: false, error: errorMessage };
+            throw error;
         }
 
         try {
@@ -687,7 +707,7 @@ class RedditAdapter extends BaseAdapter {
 
         } catch (error) {
             this.log(`[ERROR] Reddit post creation failed: ${error.message}`, 'error', true);
-            return { success: false, error: error.message };
+            throw error;
         }
     }
 }
@@ -706,7 +726,7 @@ class TwitterAdapter extends BaseAdapter {
         if (!appKey || !appSecret || !accessToken || !accessSecret || !tweetText) {
             const errorMessage = 'Missing required Twitter credentials or tweet text.';
             this.log(`[ERROR] ${errorMessage}`, 'error', true);
-            return { success: false, error: errorMessage };
+            throw error;
         }
 
         try {
@@ -721,7 +741,7 @@ class TwitterAdapter extends BaseAdapter {
             }
         } catch (error) {
             this.log(`[ERROR] Twitter post failed: ${error.message}`, 'error', true);
-            return { success: false, error: error.message };
+            throw error;
         }
     }
 }
@@ -740,7 +760,7 @@ class FacebookAdapter extends BaseAdapter {
         if (!appId || !appSecret || !pageAccessToken || !pageId || !message) {
             const errorMessage = 'Missing required Facebook credentials or post message.';
             this.log(`[ERROR] ${errorMessage}`, 'error', true);
-            return { success: false, error: errorMessage };
+            throw error;
         }
 
         try {
@@ -755,7 +775,7 @@ class FacebookAdapter extends BaseAdapter {
             }
         } catch (error) {
             this.log(`[ERROR] Facebook post failed: ${error.message}`, 'error', true);
-            return { success: false, error: error.message };
+            throw error;
         }
     }
 }
@@ -774,7 +794,7 @@ class InstagramAdapter extends BaseAdapter {
         if (!pageId || !accessToken || !imageUrl || !caption) {
             const errorMessage = 'Missing required Instagram credentials or content fields (pageId, accessToken, imageUrl, caption).';
             this.log(`[ERROR] ${errorMessage}`, 'error', true);
-            return { success: false, error: errorMessage };
+            throw error;
         }
 
         try {
@@ -789,7 +809,7 @@ class InstagramAdapter extends BaseAdapter {
             }
         } catch (error) {
             this.log(`[ERROR] Instagram post failed: ${error.message}`, 'error', true);
-            return { success: false, error: error.message };
+            throw error;
         }
     }
 }
@@ -881,7 +901,7 @@ class BookmarkZooAdapter extends BaseAdapter {
             this.log(`[ERROR] Global script error: ${error.message}`, 'error', true);
             this.log('----------------------', 'error', true);
             this.log('[EVENT] An error occurred.', 'error', true);
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) {
                 await browser.close();
@@ -1057,7 +1077,7 @@ class TeslaPearlBookmarkingAdapter extends BaseAdapter {
             this.log(`[ERROR] Global script error: ${error.message}`, 'error', true);
             this.log('----------------------', 'error', true);
             this.log('[EVENT] An error occurred.', 'error', true);
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) {
                 await browser.close();
@@ -1192,7 +1212,7 @@ class GainWebAdapter extends BaseAdapter {
                 fs.unlinkSync(errorScreenshotPath);
             }
 
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) {
                 await browser.close();
@@ -1307,7 +1327,7 @@ class SocialSubmissionEngineAdapter extends BaseAdapter {
                 fs.unlinkSync(errorScreenshotPath);
             }
 
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) {
                 await browser.close();
@@ -1328,7 +1348,7 @@ class DevToAdapter extends BaseAdapter {
         if (!apiKey) {
             const errorMessage = 'Missing dev.to API key in credentials (devtoApiKey or devto-api-key).';
             this.log(errorMessage, 'error', true);
-            return { success: false, error: errorMessage };
+            throw error;
         }
         try {
             const articleData = {
@@ -1355,7 +1375,7 @@ class DevToAdapter extends BaseAdapter {
         } catch (err) {
             const errorMsg = err.response?.data || err.message;
             this.log(`Dev.to post error: ${JSON.stringify(errorMsg)}`, 'error', true);
-            return { success: false, error: errorMsg };
+            throw error;
         }
     }
 }
@@ -1369,7 +1389,7 @@ class HashnodeAdapter extends BaseAdapter {
         if (!apiToken || !username) {
             const errorMessage = 'Missing Hashnode API token or username in credentials (hashnodeApiToken/hashnode-api-token, hashnodeUsername/hashnode-username).';
             this.log(errorMessage, 'error', true);
-            return { success: false, error: errorMessage };
+            throw error;
         }
         // Utility to slugify title
         function slugify(str) {
@@ -1409,7 +1429,7 @@ class HashnodeAdapter extends BaseAdapter {
         } catch (err) {
             const errorMsg = err.response?.data || err.message;
             this.log(`Failed to get publication ID: ${JSON.stringify(errorMsg)}`, 'error', true);
-            return { success: false, error: errorMsg };
+            throw error;
         }
         // Step 2: Create post
         const postQuery = `
@@ -1458,7 +1478,7 @@ class HashnodeAdapter extends BaseAdapter {
         } catch (err) {
             const errorMsg = err.response?.data || err.message;
             this.log(`Failed to publish post: ${JSON.stringify(errorMsg)}`, 'error', true);
-            return { success: false, error: errorMsg };
+            throw error;
         }
     }
 }
@@ -1480,7 +1500,7 @@ class TumblrAdapter extends BaseAdapter {
         if (!this.consumerKey || !this.consumerSecret || !this.accessToken || !this.accessTokenSecret || !this.blogHostname) {
             const errorMessage = 'Missing Tumblr credentials (consumerKey, consumerSecret, accessToken, accessTokenSecret, blogHostname).';
             this.log(errorMessage, 'error', true);
-            return { success: false, error: errorMessage };
+            throw error;
         }
         const oauth = new OAuth(
             'https://www.tumblr.com/oauth/request_token',
@@ -1599,9 +1619,9 @@ class DelphiForumAdapter extends BaseAdapter {
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                 fs.unlinkSync(errorScreenshotPath);
                 this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
-                return { success: false, error: error.message, screenshotUrl: errorCloudinaryResult.secure_url };
+                throw error;
             }
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) await browser.close();
         }
@@ -1676,9 +1696,9 @@ class CityDataForumAdapter extends BaseAdapter {
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                 fs.unlinkSync(errorScreenshotPath);
                 this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
-                return { success: false, error: error.message, screenshotUrl: errorCloudinaryResult.secure_url };
+                throw error;
             }
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) await browser.close();
         }
@@ -1760,7 +1780,7 @@ class PingInAdapter extends BaseAdapter {
                 console.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`);
                 fs.unlinkSync(errorScreenshotPath);
             }
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) {
                 await browser.close();
@@ -1869,7 +1889,7 @@ class PrePostSEOPingAdapter extends BaseAdapter {
                 fs.unlinkSync(errorScreenshotPath);
                 this.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`, 'info', true);
             }
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) {
                 await browser.close();
@@ -1981,7 +2001,7 @@ class BacklinkPingAdapter extends BaseAdapter {
                 fs.unlinkSync(errorScreenshotPath);
                 this.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`, 'info', true);
             }
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) {
                 await browser.close();
@@ -2082,7 +2102,7 @@ class ExciteSubmitAdapter extends BaseAdapter {
                 fs.unlinkSync(errorScreenshotPath);
                 this.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`, 'info', true);
             }
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (apiCallTimer) clearTimeout(apiCallTimer);
             if (browser) {
@@ -2212,9 +2232,9 @@ class OpenPathshalaForumAdapter extends BaseAdapter {
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                 fs.unlinkSync(errorScreenshotPath);
                 this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
-                return { success: false, error: error.message, screenshotUrl: errorCloudinaryResult.secure_url };
+                throw error;
             }
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) await browser.close();
         }
@@ -2238,9 +2258,18 @@ class BoardsIEForumAdapter extends BaseAdapter {
         let context;
         let postScreenshotUrl = '';
         try {
+            // --- Turnstile Bypass Integration with null check ---
+            const cf = new TurnstileBypass();
+            let bypass = null;
+            try {
+                bypass = await cf.solve('https://www.boards.ie/entry/signin');
+            } catch (e) {
+                this.log(`[BoardsIEForumAdapter] [WARN] turnstile-bypass failed: ${e.message}`, 'warning', true);
+            }
+            const userAgent = (bypass && bypass.userAgent) ? bypass.userAgent : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+            const cookies = (bypass && bypass.cookies) ? bypass.cookies : [];
+
             browser = await chromium.launch({ headless: true });
-            // --- MAX CUSTOM STEALTH SETTINGS ---
-            const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
             const viewport = { width: 1366 + Math.floor(Math.random()*40), height: 768 + Math.floor(Math.random()*40) };
             context = await browser.newContext({
                 userAgent,
@@ -2258,6 +2287,13 @@ class BoardsIEForumAdapter extends BaseAdapter {
                 'Sec-CH-UA-Mobile': '?0',
                 'Sec-CH-UA-Platform': '"Windows"',
             });
+            // Set cookies from bypass
+            if (cookies && cookies.length > 0) {
+                await context.addCookies(cookies.map(cookie => ({
+                    ...cookie,
+                    url: 'https://www.boards.ie',
+                })));
+            }
             // Block WebRTC leaks
             await context.addInitScript(() => {
                 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -2340,9 +2376,9 @@ class BoardsIEForumAdapter extends BaseAdapter {
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                 fs.unlinkSync(errorScreenshotPath);
                 this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
-                return { success: false, error: error.message, screenshotUrl: errorCloudinaryResult.secure_url };
+                throw error;
             }
-            return { success: false, error: error.message };
+            throw error;
         } finally {
             if (browser) await browser.close();
         }

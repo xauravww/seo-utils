@@ -66,29 +66,19 @@ const processWebsite = async (jobDetails, job) => {
     // 2. If adapter exists, run it
     if (adapter) {
         console.log(`[${requestId}] [Worker] Adapter found, executing publish for ${url}.`);
-        try {
-            const publishResult = await adapter.publish(job); // Pass job to publish()
-            adapterLogs = adapter.getCollectedLogs(); // Get logs collected by this adapter
-            if (publishResult.success) {
-                console.log(`[${requestId}] [Worker] Adapter publish completed for ${url}.`);
-                if (publishResult.postUrl) {
-                    console.log(`[${requestId}] [Worker] Posted URL: ${publishResult.postUrl}`);
-                } else if (publishResult.tweetUrl) {
-                    console.log(`[${requestId}] [Worker] Posted URL: ${publishResult.tweetUrl}`);
-                }
-            } else {
-                console.error(`[${requestId}] [Worker] Adapter publish failed for ${url}: ${publishResult.error}`);
+        const publishResult = await adapter.publish(job); // Pass job to publish()
+        adapterLogs = adapter.getCollectedLogs(); // Get logs collected by this adapter
+        if (publishResult.success) {
+            console.log(`[${requestId}] [Worker] Adapter publish completed for ${url}.`);
+            if (publishResult.postUrl) {
+                console.log(`[${requestId}] [Worker] Posted URL: ${publishResult.postUrl}`);
+            } else if (publishResult.tweetUrl) {
+                console.log(`[${requestId}] [Worker] Posted URL: ${publishResult.tweetUrl}`);
             }
-            return { ...publishResult, category, adapterLogs }; // Return the result, category and adapter logs
-        } catch (adapterError) {
-            console.error(`[${requestId}] [Worker] Error during adapter publish for ${url}:`, adapterError);
-            publishLog(requestId, `[Worker] Error during adapter publish for ${url}: ${adapterError.message}`, 'error');
-            // Ensure adapterLogs are collected even on error if available
-            if (adapter && typeof adapter.getCollectedLogs === 'function') {
-                adapterLogs = adapter.getCollectedLogs();
-            }
-            return { success: false, error: adapterError.message, category, adapterLogs }; // Return failure with category and adapter logs
+        } else {
+            console.error(`[${requestId}] [Worker] Adapter publish failed for ${url}: ${publishResult.error}`);
         }
+        return { ...publishResult, category, adapterLogs }; // Return the result, category and adapter logs
     } else {
         const message = `[Worker] No adapter found for category: '${category}' or domain: ${url}`;
         console.warn(`[${requestId}] ${message}`);
@@ -195,10 +185,10 @@ const startAllCategoryWorkers = () => {
           const { website, content, campaignId, userId, minimumInclude, requestId: reqId } = job.data;
           requestId = reqId;
           await job.log(`[BullMQ] [${category}] Starting job ${job.id} (requestId: ${requestId})`);
+          // Let errors from processWebsite throw so BullMQ marks the job as failed
           const result = await processWebsite({ requestId, website, content, campaignId }, job);
           return {
             status: result.success ? 'done' : 'error',
-            categorizedLogs: { [result.category]: result.adapterLogs },
             ...result
           };
         }
