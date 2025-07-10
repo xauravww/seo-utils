@@ -33,7 +33,7 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-const redisPublisher = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
+const redisPublisher = new IORedis(process.env.REDIS_URL || 'redis://redis:6379');
 function publishLog(requestId, message, level = 'info') {
     const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
     redisPublisher.publish(`logs:${requestId}`, payload);

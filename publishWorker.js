@@ -145,9 +145,9 @@ const run = async (workerData) => {
     }
 };
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
 const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
-const redisPublisher = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
+const redisPublisher = new IORedis(process.env.REDIS_URL || 'redis://redis:6379');
 function publishLog(requestId, message, level = 'info') {
   const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
   redisPublisher.publish(`logs:${requestId}`, payload);

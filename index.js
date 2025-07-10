@@ -24,7 +24,7 @@ import * as websocketLogger from './websocketLogger.js';
 import { Job } from 'bullmq';
 import IORedis from 'ioredis';
 import axios from 'axios';
-const redis = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
+const redis = new IORedis(process.env.REDIS_URL || 'redis://redis:6379');
 
 dotenv.config();
 loadSessions(); // Load sessions from file on startup
