@@ -80,7 +80,8 @@ async function processPublishJob(reqBody, requestId) {
         console.log(`[${requestId}] Content already an object.`);
     }
     let campaign_category = category || (info && info.category);
-    let sitesDetails = info ? info.sites_details : (sites_details || []);
+    // Ensure sitesDetails is always an array
+    let sitesDetails = (info && Array.isArray(info.sites_details)) ? info.sites_details : (Array.isArray(sites_details) ? sites_details : []);
     let minimumInclude = 0;
     let availableWebsites = [];
     let skippedWebsites = [];
