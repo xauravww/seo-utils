@@ -24,8 +24,9 @@ import * as websocketLogger from './websocketLogger.js';
 import { Job } from 'bullmq';
 import IORedis from 'ioredis';
 import axios from 'axios';
+console.log('[index.js] REDIS_HOST:', process.env.REDIS_HOST);
 const redis = new IORedis({
-  host: process.env.REDIS_HOST,
+  host: process.env.REDIS_HOST || 'redis',
   port: Number(process.env.REDIS_PORT),
   password: process.env.REDIS_PASSWORD,
 });

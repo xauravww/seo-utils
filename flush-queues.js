@@ -3,8 +3,9 @@ dotenv.config();
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 
+console.log('[flush-queues.js] REDIS_HOST:', process.env.REDIS_HOST);
 const connection = new IORedis({
-  host: process.env.REDIS_HOST,
+  host: process.env.REDIS_HOST || 'redis',
   port: Number(process.env.REDIS_PORT) || 6379,
   password: process.env.REDIS_PASSWORD || undefined,
   maxRetriesPerRequest: null,

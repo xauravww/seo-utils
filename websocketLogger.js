@@ -89,8 +89,9 @@ export function log(requestId, data) {
 } 
 
 // Redis Pub/Sub for cross-process log relaying
+console.log('[websocketLogger.js] REDIS_HOST:', process.env.REDIS_HOST);
 const redisSubscriber = new IORedis({
-  host: process.env.REDIS_HOST,
+  host: process.env.REDIS_HOST || 'redis',
   port: Number(process.env.REDIS_PORT),
   password: process.env.REDIS_PASSWORD,
 });

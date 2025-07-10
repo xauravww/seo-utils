@@ -181,16 +181,16 @@ const run = async (workerData) => {
         return { status: 'error', message: 'No successful publication jobs.', categorizedLogs };
     }
 };
-
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
 const connection = new IORedis({
-  host: process.env.REDIS_HOST,
+  host: process.env.REDIS_HOST || 'redis',
   port: Number(process.env.REDIS_PORT),
   password: process.env.REDIS_PASSWORD,
   maxRetriesPerRequest: null,
 });
+console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
 const redisPublisher = new IORedis({
-  host: process.env.REDIS_HOST,
+  host: process.env.REDIS_HOST || 'redis',
   port: Number(process.env.REDIS_PORT),
   password: process.env.REDIS_PASSWORD,
   maxRetriesPerRequest: null,

@@ -33,8 +33,9 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
+console.log('[controllerAdapters.js] REDIS_HOST:', process.env.REDIS_HOST);
 const redisPublisher = new IORedis({
-  host: process.env.REDIS_HOST,
+  host: process.env.REDIS_HOST || 'redis',
   port: Number(process.env.REDIS_PORT),
   password: process.env.REDIS_PASSWORD,
 });

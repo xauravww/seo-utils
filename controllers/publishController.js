@@ -15,8 +15,9 @@ const __dirname = path.dirname(__filename);
 // This will be our new background worker for handling all publications.
 // import publishWorker from '../publishWorker.js'; 
 
+console.log('[controllers/publishController.js] REDIS_HOST:', process.env.REDIS_HOST);
 const connection = new IORedis({
-  host: process.env.REDIS_HOST,
+  host: process.env.REDIS_HOST || 'redis',
   port: Number(process.env.REDIS_PORT) || 6379,
   password: process.env.REDIS_PASSWORD || undefined,
   maxRetriesPerRequest: null,
