@@ -39,6 +39,11 @@ const redisPublisher = new IORedis({
   port: Number(process.env.REDIS_PORT) || 6379,
   password: process.env.REDIS_PASSWORD,
 });
+
+redisPublisher.on('error', (err) => {
+  console.error('[controllerAdapters.js][REDIS ERROR]', err);
+});
+
 function publishLog(requestId, message, level = 'info') {
     const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
     redisPublisher.publish(`logs:${requestId}`, payload);

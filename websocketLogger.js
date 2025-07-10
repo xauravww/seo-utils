@@ -108,4 +108,7 @@ redisSubscriber.on('pmessage', (pattern, channel, message) => {
   } catch (e) {
     console.error('Failed to parse log message from Redis:', e);
   }
+});
+redisSubscriber.on('error', (err) => {
+  console.error('[websocketLogger.js][REDIS ERROR]', err);
 }); 

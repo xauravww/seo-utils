@@ -11,6 +11,10 @@ const connection = new IORedis({
   maxRetriesPerRequest: null,
 });
 
+connection.on('error', (err) => {
+  console.error('[flush-queues.js][REDIS ERROR]', err);
+});
+
 const categories = [
   'blog', 'article', 'forum', 'social_media', 'search', 'ping',
   'classified', 'bookmarking', 'directory', 'other'

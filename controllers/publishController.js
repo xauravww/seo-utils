@@ -23,6 +23,10 @@ const connection = new IORedis({
   maxRetriesPerRequest: null,
 });
 
+connection.on('error', (err) => {
+  console.error('[controllers/publishController.js][REDIS ERROR]', err);
+});
+
 // Define all main categories
 const categories = [
   'blog',

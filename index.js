@@ -35,6 +35,10 @@ const redis = new IORedis({
   password: process.env.REDIS_PASSWORD,
 });
 
+redis.on('error', (err) => {
+  console.error('[index.js][REDIS ERROR]', err);
+});
+
 
 loadSessions(); // Load sessions from file on startup
 

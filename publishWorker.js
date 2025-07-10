@@ -200,6 +200,13 @@ function publishLog(requestId, message, level = 'info') {
   redisPublisher.publish(`logs:${requestId}`, payload);
 }
 
+connection.on('error', (err) => {
+  console.error('[publishWorker.js][REDIS ERROR][connection]', err);
+});
+redisPublisher.on('error', (err) => {
+  console.error('[publishWorker.js][REDIS ERROR][redisPublisher]', err);
+});
+
 // --- BullMQ Worker Setup ---
 const queueConcurrency = parseInt(process.env.QUEUE_CONCURRENCY, 10) || 1;
 
