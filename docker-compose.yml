@@ -10,7 +10,8 @@ services:
     depends_on:
       - redis
     command: >
-      sh -c "./wait-for-it.sh redis:6379 -- \
+      sh -c "chmod +x wait-for-it.sh && \
+             ./wait-for-it.sh redis:6379 -- \
              npm install && \
              npx playwright install chromium --with-deps && \
              node index.js"
