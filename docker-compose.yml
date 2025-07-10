@@ -10,8 +10,9 @@ services:
     depends_on:
       - redis
     command: >
-      sh -c "npm install &&
-             npx playwright install chromium --with-deps &&
+      sh -c "./wait-for-it.sh redis:6379 -- \
+             npm install && \
+             npx playwright install chromium --with-deps && \
              node index.js"
     volumes:
       - .:/app
