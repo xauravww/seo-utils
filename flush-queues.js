@@ -1,8 +1,14 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 
-const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
-const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+const connection = new IORedis({
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT) || 6379,
+  password: process.env.REDIS_PASSWORD || undefined,
+  maxRetriesPerRequest: null,
+});
 
 const categories = [
   'blog', 'article', 'forum', 'social_media', 'search', 'ping',

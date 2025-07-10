@@ -78,11 +78,48 @@ const processWebsite = async (jobDetails, job) => {
         } else {
             console.error(`[${requestId}] [Worker] Adapter publish failed for ${url}: ${publishResult.error}`);
         }
-        return { ...publishResult, category, adapterLogs }; // Return the result, category and adapter logs
+        // After result is created (success or failure)
+        const result = { ...publishResult, category, adapterLogs };
+        // Always push at least one log to Redis for aggregation
+        if (jobDetails.campaignId) {
+            const logsToPush = (result.adapterLogs && result.adapterLogs.length > 0)
+              ? result.adapterLogs
+              : [{ message: 'No logs collected by adapter.', level: 'info' }];
+            await connection.rpush(
+              `campaign_logs:${jobDetails.campaignId}`,
+              JSON.stringify({
+                userId: jobDetails.userId,
+                website: jobDetails.website.url,
+                logs: {
+                  [result.category]: {
+                    logs: logsToPush,
+                    result: result.success ? 'success' : 'failure',
+                  }
+                }
+              })
+            );
+        }
+        return result;
     } else {
         const message = `[Worker] No adapter found for category: '${category}' or domain: ${url}`;
         console.warn(`[${requestId}] ${message}`);
         publishLog(requestId, message, 'warning');
+        // Push logs to Redis for aggregation, regardless of success
+        if (jobDetails.campaignId) {
+            await connection.rpush(
+              `campaign_logs:${jobDetails.campaignId}`,
+              JSON.stringify({
+                userId: jobDetails.userId,
+                website: jobDetails.website.url,
+                logs: {
+                  'uncategorized': {
+                    logs: [{ message, level: 'warning' }],
+                    result: 'failure',
+                  }
+                }
+              })
+            );
+        }
         return { success: false, error: message, category, adapterLogs: [{ message, level: 'warning' }] }; // Return failure if no adapter
     }
 };
@@ -145,9 +182,19 @@ const run = async (workerData) => {
     }
 };
 
-const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
-const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
-const redisPublisher = new IORedis(process.env.REDIS_URL || 'redis://redis:6379');
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const connection = new IORedis({
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT),
+  password: process.env.REDIS_PASSWORD,
+  maxRetriesPerRequest: null,
+});
+const redisPublisher = new IORedis({
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT),
+  password: process.env.REDIS_PASSWORD,
+  maxRetriesPerRequest: null,
+});
 function publishLog(requestId, message, level = 'info') {
   const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
   redisPublisher.publish(`logs:${requestId}`, payload);

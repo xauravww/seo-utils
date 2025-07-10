@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import { WebSocketServer } from 'ws';
 import IORedis from 'ioredis';
 
@@ -87,7 +89,11 @@ export function log(requestId, data) {
 } 
 
 // Redis Pub/Sub for cross-process log relaying
-const redisSubscriber = new IORedis(process.env.REDIS_URL || 'redis://redis:6379');
+const redisSubscriber = new IORedis({
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT),
+  password: process.env.REDIS_PASSWORD,
+});
 redisSubscriber.psubscribe('logs:*', (err, count) => {
   if (err) console.error('Redis psubscribe error:', err);
   else console.log('Subscribed to Redis log channels');

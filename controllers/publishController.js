@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import { v4 as uuidv4 } from 'uuid';
 import * as websocketLogger from '../websocketLogger.js';
 import { Worker } from 'worker_threads';
@@ -13,9 +15,12 @@ const __dirname = path.dirname(__filename);
 // This will be our new background worker for handling all publications.
 // import publishWorker from '../publishWorker.js'; 
 
-// Redis connection for BullMQ
-const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
-const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null });
+const connection = new IORedis({
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT) || 6379,
+  password: process.env.REDIS_PASSWORD || undefined,
+  maxRetriesPerRequest: null,
+});
 
 // Define all main categories
 const categories = [
@@ -80,8 +85,11 @@ async function processPublishJob(reqBody, requestId) {
         console.log(`[${requestId}] Content already an object.`);
     }
     let campaign_category = category || (info && info.category);
-    // Ensure sitesDetails is always an array
-    let sitesDetails = (info && Array.isArray(info.sites_details)) ? info.sites_details : (Array.isArray(sites_details) ? sites_details : []);
+    // Ensure sitesDetails is always an array before using .find
+    let sitesDetails = (info && Array.isArray(info.sites_details))
+      ? info.sites_details
+      : (Array.isArray(sites_details) ? sites_details : []);
+    if (!Array.isArray(sitesDetails)) sitesDetails = [];
     let minimumInclude = 0;
     let availableWebsites = [];
     let skippedWebsites = [];
@@ -205,8 +213,34 @@ export const publish = async (req, res) => {
         requestId: requestId
       });
     } else {
+      // No eligible websites: push log to Redis and add dummy job
+      const campaign_id = jobData.campaignId || (req.body.info && req.body.info.campaign_id);
+      const user_id = jobData.userId || (req.body.info && req.body.info.user_id);
+      if (campaign_id) {
+        await connection.rpush(
+          `campaign_logs:${campaign_id}`,
+          JSON.stringify({
+            userId: user_id,
+            website: null,
+            logs: {
+              uncategorized: {
+                logs: [{ message: jobData.error || 'No eligible websites found for publication.', level: 'error' }],
+                result: 'failure',
+              }
+            }
+          })
+        );
+        // Add a dummy job to trigger aggregation and update
+        await queue.add('publishWebsite', {
+          requestId,
+          campaignId: campaign_id,
+          userId: user_id,
+          isDummy: true,
+          error: jobData.error || 'No eligible websites found for publication.'
+        });
+      }
       res.status(400).json({
-        message: 'No eligible websites found for publication.',
+        message: jobData.error || 'No eligible websites found for publication.',
         requestId: requestId
       });
     }

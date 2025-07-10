@@ -24,7 +24,11 @@ import * as websocketLogger from './websocketLogger.js';
 import { Job } from 'bullmq';
 import IORedis from 'ioredis';
 import axios from 'axios';
-const redis = new IORedis(process.env.REDIS_URL || 'redis://redis:6379');
+const redis = new IORedis({
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT),
+  password: process.env.REDIS_PASSWORD,
+});
 
 dotenv.config();
 loadSessions(); // Load sessions from file on startup
@@ -76,6 +80,7 @@ for (const cat of categories) {
   async function getJobData(jobId) {
     try {
       const job = await queues[cat].getJob(jobId);
+      // console.log("job.data we get : ", job.data);
       return job?.data;
     } catch (e) {
       return undefined;
@@ -102,12 +107,23 @@ for (const cat of categories) {
       }
       const remaining = await redis.scard(`campaign_jobs:${campaign_id}`);
       if (remaining === 0) {
-        // All jobs for this campaign are done, update external API
+        // All jobs for this campaign are done, aggregate logs
+        const logEntries = await redis.lrange(`campaign_logs:${campaign_id}`, 0, -1);
+        let aggregatedLogs = {};
+        for (const entry of logEntries) {
+          const { logs } = JSON.parse(entry);
+          for (const [cat, logObj] of Object.entries(logs)) {
+            if (!aggregatedLogs[cat]) aggregatedLogs[cat] = { logs: [], result: '' };
+            aggregatedLogs[cat].logs.push(...(logObj.logs || []));
+            aggregatedLogs[cat].result = logObj.result || aggregatedLogs[cat].result;
+          }
+        }
+        // Compose result string
         const totalCount = parseInt(await redis.get(`campaign_total:${campaign_id}`) || '0', 10);
         const successCount = parseInt(await redis.get(`campaign_success:${campaign_id}`) || '0', 10);
         const resultString = `${successCount}/${totalCount}`;
         const finalStatus = successCount > 0 ? 'completed' : 'failed';
-        if (campaign_id && user_id && message.categorizedLogs) {
+        if (campaign_id && user_id) {
           try {
             const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
             const updatePayload = {
@@ -116,9 +132,9 @@ for (const cat of categories) {
               status: finalStatus,
               result: resultString,
             };
-            for (const category in message.categorizedLogs) {
-              if (message.categorizedLogs.hasOwnProperty(category)) {
-                updatePayload.logs[category] = JSON.stringify(message.categorizedLogs[category]);
+            for (const category in aggregatedLogs) {
+              if (aggregatedLogs.hasOwnProperty(category)) {
+                updatePayload.logs[category] = JSON.stringify(aggregatedLogs[category]);
               }
             }
             const authToken = process.env.UTIL_TOKEN ; // REPLACE WITH ACTUAL TOKEN RETRIEVAL
@@ -139,13 +155,14 @@ for (const cat of categories) {
             }
           }
         } else {
-          websocketLogger.log(requestId, `[Worker Update] Skipping campaign update: missing campaignId, userId, or categorizedLogs.`, 'warning');
-          console.log(`[${requestId}] Skipping campaign update. Missing campaignId, userId, or categorizedLogs.`);
+          websocketLogger.log(requestId, `[Worker Update] Skipping campaign update: missing campaignId or userId.`, 'warning');
+          console.log(`[${requestId}] Skipping campaign update. Missing campaignId or userId.`);
         }
         // Clean up Redis keys
         await redis.del(`campaign_jobs:${campaign_id}`);
         await redis.del(`campaign_total:${campaign_id}`);
         await redis.del(`campaign_success:${campaign_id}`);
+        await redis.del(`campaign_logs:${campaign_id}`);
       }
     }
     if (requestId) {
