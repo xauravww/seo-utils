@@ -184,14 +184,14 @@ const run = async (workerData) => {
 console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
 const connection = new IORedis({
   host: process.env.REDIS_HOST || 'redis',
-  port: Number(process.env.REDIS_PORT),
+  port: Number(process.env.REDIS_PORT) || 6379,
   password: process.env.REDIS_PASSWORD,
   maxRetriesPerRequest: null,
 });
 console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
 const redisPublisher = new IORedis({
   host: process.env.REDIS_HOST || 'redis',
-  port: Number(process.env.REDIS_PORT),
+  port: Number(process.env.REDIS_PORT) || 6379,
   password: process.env.REDIS_PASSWORD,
   maxRetriesPerRequest: null,
 });

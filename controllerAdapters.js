@@ -36,7 +36,7 @@ cloudinary.config({
 console.log('[controllerAdapters.js] REDIS_HOST:', process.env.REDIS_HOST);
 const redisPublisher = new IORedis({
   host: process.env.REDIS_HOST || 'redis',
-  port: Number(process.env.REDIS_PORT),
+  port: Number(process.env.REDIS_PORT) || 6379,
   password: process.env.REDIS_PASSWORD,
 });
 function publishLog(requestId, message, level = 'info') {

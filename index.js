@@ -1,5 +1,9 @@
 import express from 'express';
+
 import dotenv from 'dotenv';
+dotenv.config();
+// this was causing env not to load and it always points to the default value of the env variable
+
 import { createServer } from 'http';
 import { setupWebSocketServer } from './websocketLogger.js';
 import linkedinRoutes from './routes/linkedinRoutes.js';
@@ -27,11 +31,11 @@ import axios from 'axios';
 console.log('[index.js] REDIS_HOST:', process.env.REDIS_HOST);
 const redis = new IORedis({
   host: process.env.REDIS_HOST || 'redis',
-  port: Number(process.env.REDIS_PORT),
+  port: Number(process.env.REDIS_PORT) || 6379,
   password: process.env.REDIS_PASSWORD,
 });
 
-dotenv.config();
+
 loadSessions(); // Load sessions from file on startup
 
 // When jobs are created, add their jobIds to a Redis set keyed by campaign_id

@@ -92,7 +92,7 @@ export function log(requestId, data) {
 console.log('[websocketLogger.js] REDIS_HOST:', process.env.REDIS_HOST);
 const redisSubscriber = new IORedis({
   host: process.env.REDIS_HOST || 'redis',
-  port: Number(process.env.REDIS_PORT),
+  port: Number(process.env.REDIS_PORT) || 6379,
   password: process.env.REDIS_PASSWORD,
 });
 redisSubscriber.psubscribe('logs:*', (err, count) => {
