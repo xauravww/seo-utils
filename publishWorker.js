@@ -188,8 +188,8 @@ const connection = new Redis({
   port: process.env.PUBLISH_REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
 });
 const redisPublisher = new Redis({
-  host: process.env.REDIS_HOST || 'redis',
-  port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
+  host: process.env.PUBLISH_REDIS_HOST || 'redis',
+  port: process.env.PUBLISH_REDIS_HOST ? parseInt(process.env.REDIS_PORT, 10) : 6379,
 });
 function publishLog(requestId, message, level = 'info') {
   const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
