@@ -20,7 +20,7 @@ import swaggerSpec from './swaggerConfig.js';
 import { ExpressAdapter } from '@bull-board/express';
 import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter.js';
-import { queues, categories } from './controllers/publishController.js';
+import { queues, categories, redisConnectionConfig } from './controllers/publishController.js';
 import { QueueEvents } from 'bullmq';
 import os from 'os';
 import { exec } from 'child_process';
@@ -81,7 +81,7 @@ setupWebSocketServer(server);
 // Setup BullMQ QueueEvents listeners to forward logs to websocketLogger
 for (const cat of categories) {
   const queueName = `${cat}Queue`;
-  const queueEvents = new QueueEvents(queueName, { connection: queues[cat].client });
+  const queueEvents = new QueueEvents(queueName, { connection: redisConnectionConfig });
 
   // Helper to get requestId, campaignId, userId, etc. from jobId
   async function getJobData(jobId) {

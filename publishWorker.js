@@ -6,7 +6,7 @@ import { createClient } from 'redis';
 import { parentPort, workerData } from 'worker_threads';
 import * as websocketLogger from './websocketLogger.js';
 import { getAdapter } from './controllerAdapters.js';
-import { queues, categories, processPublishJob } from './controllers/publishController.js';
+import { queues, categories, processPublishJob, redisConnectionConfig } from './controllers/publishController.js';
 
 // TODO: Import the controller adapters
 // import { getAdapter } from './controllerAdapters.js';
@@ -245,7 +245,7 @@ const startAllCategoryWorkers = () => {
         // Call processWebsite with job instance
         // return await processWebsite(jobData, job); // <-- Remove this line
       },
-      { connection, concurrency: queueConcurrency }
+      { connection: redisConnectionConfig, concurrency: queueConcurrency }
     );
     console.log(`[BullMQ] Worker started for ${category}Queue`);
   });

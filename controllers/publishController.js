@@ -16,15 +16,12 @@ const __dirname = path.dirname(__filename);
 // import publishWorker from '../publishWorker.js'; 
 
 console.log('[controllers/publishController.js] REDIS_HOST:', process.env.REDIS_HOST);
-const connection = createClient({
-  url: `redis://${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || 6379}`
-});
-connection.on('error', (err) => {
-  console.error('[controllers/publishController.js][REDIS ERROR]', err);
-});
-await connection.connect();
 
-// Only single-node Redis client remains. Remove any cluster-related code.
+// Centralized BullMQ Redis connection config
+export const redisConnectionConfig = {
+  host: process.env.REDIS_HOST || 'redis',
+  port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
+};
 
 // Define all main categories
 const categories = [
@@ -43,7 +40,7 @@ const categories = [
 // Create a BullMQ queue for each category
 const queues = {};
 categories.forEach(cat => {
-  queues[cat] = new Queue(`${cat}Queue`, { connection });
+  queues[cat] = new Queue(`${cat}Queue`, { connection: redisConnectionConfig });
 });
 
 // Helper to get the correct queue by category
