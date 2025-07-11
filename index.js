@@ -26,43 +26,16 @@ import os from 'os';
 import { exec } from 'child_process';
 import * as websocketLogger from './websocketLogger.js';
 import { Job } from 'bullmq';
-import IORedis from 'ioredis';
+import { createClient } from 'redis';
 import axios from 'axios';
 console.log('[index.js] REDIS_HOST:', process.env.REDIS_HOST);
-const redis = new IORedis({
-  host: process.env.REDIS_HOST || 'redis',
-  port: Number(process.env.REDIS_PORT) || 6379,
-  password: process.env.REDIS_PASSWORD,
+const redis = createClient({
+  url: `redis://${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || 6379}`
 });
-
 redis.on('error', (err) => {
   console.error('[index.js][REDIS ERROR]', err);
 });
-
-if (process.env.USE_REDIS_CLUSTER === '1' || process.env.USE_REDIS_CLUSTER === 'true') {
-  const redisCluster = new IORedis.Cluster([
-    {
-      host: process.env.REDIS_HOST || 'redis',
-      port: Number(process.env.REDIS_PORT) || 6379,
-    }
-  ], {
-    natMap: {
-      'redis:6379': { host: 'localhost', port: 6379 },
-    }
-  });
-  redisCluster.on('error', (err) => {
-    console.error('[index.js][REDIS CLUSTER ERROR]', err);
-  });
-  (async () => {
-    try {
-      await redisCluster.set('test-cluster', 'hello from Redis Cluster');
-      const value = await redisCluster.get('test-cluster');
-      console.log('[index.js] Redis value (cluster):', value);
-    } catch (err) {
-      console.error('[index.js][REDIS CLUSTER ERROR]', err);
-    }
-  })();
-}
+await redis.connect();
 
 
 loadSessions(); // Load sessions from file on startup

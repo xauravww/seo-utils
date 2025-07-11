@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import { WebSocketServer } from 'ws';
-import IORedis from 'ioredis';
+import { createClient } from 'redis';
 
 // This map will store WebSocket clients keyed by their unique requestId.
 const clientMap = new Map();
@@ -90,16 +90,16 @@ export function log(requestId, data) {
 
 // Redis Pub/Sub for cross-process log relaying
 console.log('[websocketLogger.js] REDIS_HOST:', process.env.REDIS_HOST);
-const redisSubscriber = new IORedis({
-  host: process.env.REDIS_HOST || 'redis',
-  port: Number(process.env.REDIS_PORT) || 6379,
-  password: process.env.REDIS_PASSWORD,
+const redisSubscriber = createClient({
+  url: `redis://${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || 6379}`
 });
-redisSubscriber.psubscribe('logs:*', (err, count) => {
-  if (err) console.error('Redis psubscribe error:', err);
-  else console.log('Subscribed to Redis log channels');
+redisSubscriber.on('error', (err) => {
+  console.error('[websocketLogger.js][REDIS ERROR]', err);
 });
-redisSubscriber.on('pmessage', (pattern, channel, message) => {
+await redisSubscriber.connect();
+
+// Use node-redis v4+ pSubscribe API
+await redisSubscriber.pSubscribe('logs:*', (message, channel) => {
   // channel format: logs:{requestId}
   const requestId = channel.split(':')[1];
   try {
@@ -109,31 +109,4 @@ redisSubscriber.on('pmessage', (pattern, channel, message) => {
     console.error('Failed to parse log message from Redis:', e);
   }
 });
-redisSubscriber.on('error', (err) => {
-  console.error('[websocketLogger.js][REDIS ERROR]', err);
-}); 
-
-if (process.env.USE_REDIS_CLUSTER === '1' || process.env.USE_REDIS_CLUSTER === 'true') {
-  const redisCluster = new IORedis.Cluster([
-    {
-      host: process.env.REDIS_HOST || 'redis',
-      port: Number(process.env.REDIS_PORT) || 6379,
-    }
-  ], {
-    natMap: {
-      'redis:6379': { host: 'localhost', port: 6379 },
-    }
-  });
-  redisCluster.on('error', (err) => {
-    console.error('[websocketLogger.js][REDIS CLUSTER ERROR]', err);
-  });
-  (async () => {
-    try {
-      await redisCluster.set('test-cluster', 'hello from Redis Cluster');
-      const value = await redisCluster.get('test-cluster');
-      console.log('[websocketLogger.js] Redis value (cluster):', value);
-    } catch (err) {
-      console.error('[websocketLogger.js][REDIS CLUSTER ERROR]', err);
-    }
-  })();
-} 
+console.log('Subscribed to Redis log channels'); 

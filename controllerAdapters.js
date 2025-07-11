@@ -20,7 +20,7 @@ import { postToFacebook } from './controllers/social_media/facebookController.js
 import { postToInstagram } from './controllers/social_media/instagramController.js';
 import { UBookmarkingAdapter } from './controllers/bookmarking/ubookmarkingController.js';
 import { OAuth } from 'oauth';
-import IORedis from 'ioredis';
+import { createClient } from 'redis';
 import TurnstileBypass from 'turnstile-bypass';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -34,15 +34,13 @@ cloudinary.config({
 });
 
 console.log('[controllerAdapters.js] REDIS_HOST:', process.env.REDIS_HOST);
-const redisPublisher = new IORedis({
-  host: process.env.REDIS_HOST || 'redis',
-  port: Number(process.env.REDIS_PORT) || 6379,
-  password: process.env.REDIS_PASSWORD,
+const redisPublisher = createClient({
+  url: `redis://${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || 6379}`
 });
-
 redisPublisher.on('error', (err) => {
   console.error('[controllerAdapters.js][REDIS ERROR]', err);
 });
+await redisPublisher.connect();
 
 function publishLog(requestId, message, level = 'info') {
     const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
