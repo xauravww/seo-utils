@@ -14,6 +14,8 @@ COPY package.json package-lock.json ./
 # Install Node.js dependencies
 RUN npm ci --production
 
+RUN apt-get update && apt-get install -y curl
+
 # Install Playwright browsers
 RUN npx playwright install chromium --with-deps
 
