@@ -7,7 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios'; // Import axios for making API requests
 import { Queue } from 'bullmq';
-import { createClient } from 'redis';
+import Redis from 'ioredis';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +22,12 @@ export const redisConnectionConfig = {
   host: process.env.REDIS_HOST || 'redis',
   port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
 };
+
+// Create a single ioredis client for direct Redis commands
+const redisClient = new Redis({
+  host: process.env.REDIS_HOST || 'redis',
+  port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
+});
 
 // Define all main categories
 const categories = [
@@ -218,7 +224,7 @@ export const publish = async (req, res) => {
       const campaign_id = jobData.campaignId || (req.body.info && req.body.info.campaign_id);
       const user_id = jobData.userId || (req.body.info && req.body.info.user_id);
       if (campaign_id) {
-        await connection.rpush(
+        await redisClient.rpush(
           `campaign_logs:${campaign_id}`,
           JSON.stringify({
             userId: user_id,

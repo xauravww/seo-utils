@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 console.log('Cloudinary ENV:', process.env.CLOUDINARY_CLOUD_NAME, process.env.CLOUDINARY_API_KEY, process.env.CLOUDINARY_API_SECRET);
 import { Worker as BullWorker, QueueEvents } from 'bullmq';
-import { createClient } from 'redis';
+import Redis from 'ioredis';
 import { parentPort, workerData } from 'worker_threads';
 import * as websocketLogger from './websocketLogger.js';
 import { getAdapter } from './controllerAdapters.js';
@@ -182,15 +182,15 @@ const run = async (workerData) => {
     }
 };
 console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
-const connection = createClient({
-  url: `redis://${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || 6379}`
+// Replace connection and redisPublisher with ioredis clients
+const connection = new Redis({
+  host: process.env.REDIS_HOST || 'redis',
+  port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
 });
-await connection.connect();
-console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
-const redisPublisher = createClient({
-  url: `redis://${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || 6379}`
+const redisPublisher = new Redis({
+  host: process.env.REDIS_HOST || 'redis',
+  port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
 });
-await redisPublisher.connect();
 function publishLog(requestId, message, level = 'info') {
   const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
   redisPublisher.publish(`logs:${requestId}`, payload);

@@ -26,16 +26,17 @@ import os from 'os';
 import { exec } from 'child_process';
 import * as websocketLogger from './websocketLogger.js';
 import { Job } from 'bullmq';
-import { createClient } from 'redis';
+import Redis from 'ioredis';
 import axios from 'axios';
 console.log('[index.js] REDIS_HOST:', process.env.REDIS_HOST);
-const redis = createClient({
-  url: `redis://${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || 6379}`
+const redis = new Redis({
+  host: process.env.REDIS_HOST || 'redis',
+  port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
 });
 redis.on('error', (err) => {
   console.error('[index.js][REDIS ERROR]', err);
 });
-await redis.connect();
+// No need for connect() with ioredis
 
 
 loadSessions(); // Load sessions from file on startup
