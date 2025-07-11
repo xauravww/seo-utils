@@ -2521,3 +2521,28 @@ export const getAdapter = (jobDetails) => {
 
 // --- Adapter Factory ---
 // Removed duplicate adapterMap and getAdapter declarations to fix redeclaration error
+
+if (process.env.USE_REDIS_CLUSTER === '1' || process.env.USE_REDIS_CLUSTER === 'true') {
+  const redisCluster = new IORedis.Cluster([
+    {
+      host: process.env.REDIS_HOST || 'redis',
+      port: Number(process.env.REDIS_PORT) || 6379,
+    }
+  ], {
+    natMap: {
+      'redis:6379': { host: 'localhost', port: 6379 },
+    }
+  });
+  redisCluster.on('error', (err) => {
+    console.error('[controllerAdapters.js][REDIS CLUSTER ERROR]', err);
+  });
+  (async () => {
+    try {
+      await redisCluster.set('test-cluster', 'hello from Redis Cluster');
+      const value = await redisCluster.get('test-cluster');
+      console.log('[controllerAdapters.js] Redis value (cluster):', value);
+    } catch (err) {
+      console.error('[controllerAdapters.js][REDIS CLUSTER ERROR]', err);
+    }
+  })();
+}
