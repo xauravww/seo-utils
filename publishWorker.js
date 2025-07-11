@@ -184,8 +184,8 @@ const run = async (workerData) => {
 console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
 // Replace connection and redisPublisher with ioredis clients
 const connection = new Redis({
-  host: process.env.REDIS_HOST || 'redis',
-  port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
+  host: process.env.PUBLISH_REDIS_HOST || 'redis',
+  port: process.env.PUBLISH_REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
 });
 const redisPublisher = new Redis({
   host: process.env.REDIS_HOST || 'redis',
