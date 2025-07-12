@@ -187,6 +187,7 @@ async function processPublishJob(reqBody, requestId) {
 export { queues, getQueueByCategory, categories, processPublishJob };
 
 export const publish = async (req, res) => {
+  console.log("req.body in publish:", JSON.stringify(req.body));
     const requestId = uuidv4();
     console.log("req. id to send:",requestId)
     // Add a job to BullMQ queue for each eligible website

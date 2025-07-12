@@ -286,5 +286,14 @@
     "register_page": "",
     "post_page": "https://shotblogs.com/new-post",
     "have_credential": true
+  },
+  {
+    "name": "classified/indiabook.com",
+    "url": "https://www.indiabook.com",
+    "category": "classified",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://www.indiabook.com/cgi-bin/classifieds/add.cgi",
+    "have_credential": false
   }
 ] 
