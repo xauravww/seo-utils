@@ -295,5 +295,14 @@
     "register_page": "",
     "post_page": "https://www.indiabook.com/cgi-bin/classifieds/add.cgi",
     "have_credential": false
+  },
+  {
+    "name": "classified/oclicker.com",
+    "url": "https://oclicker.com",
+    "category": "classified",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://www.oclicker.com/post-classified-ads/?ad_type=free&cat=116",
+    "have_credential": false
   }
 ] 
