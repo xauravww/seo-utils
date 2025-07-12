@@ -29,10 +29,14 @@ import { Job } from 'bullmq';
 import Redis from 'ioredis';
 import axios from 'axios';
 console.log('[index.js] REDIS_HOST:', process.env.REDIS_HOST);
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'redis',
-  port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
-});
+const redisProtocol = process.env.REDIS_PROTOCOL || 'redis://';
+const redisHost = process.env.REDIS_HOST || 'redis';
+const redisPort = process.env.REDIS_PORT || 6379;
+const redisPassword = process.env.REDIS_PASSWORD;
+const redisUrl = redisPassword
+  ? `${redisProtocol}:${encodeURIComponent(redisPassword)}@${redisHost}:${redisPort}`
+  : `${redisProtocol}${redisHost}:${redisPort}`;
+const redis = new Redis(redisUrl);
 redis.on('error', (err) => {
   console.error('[index.js][REDIS ERROR]', err);
 });

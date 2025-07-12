@@ -17,17 +17,16 @@ const __dirname = path.dirname(__filename);
 
 console.log('[controllers/publishController.js] REDIS_HOST:', process.env.REDIS_HOST);
 
-// Centralized BullMQ Redis connection config
-export const redisConnectionConfig = {
-  host: process.env.REDIS_HOST || 'redis',
-  port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
-};
+const redisProtocol = process.env.REDIS_PROTOCOL || 'redis://';
+const redisHost = process.env.REDIS_HOST || 'redis';
+const redisPort = process.env.REDIS_PORT || 6379;
+const redisPassword = process.env.REDIS_PASSWORD;
+const redisUrl = redisPassword
+  ? `${redisProtocol}:${encodeURIComponent(redisPassword)}@${redisHost}:${redisPort}`
+  : `${redisProtocol}${redisHost}:${redisPort}`;
 
-// Create a single ioredis client for direct Redis commands
-const redisClient = new Redis({
-  host: process.env.REDIS_HOST || 'redis',
-  port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
-});
+export const redisConnectionConfig = { url: redisUrl };
+const redisClient = new Redis(redisUrl);
 
 // Define all main categories
 const categories = [

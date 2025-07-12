@@ -1,0 +1,290 @@
+[
+  {
+    "name": "pingmylinks/googleping",
+    "url": "https://pingmylinks.com/googleping",
+    "category": "ping",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://www.pingmylinks.com/googleping/",
+    "have_credential": false
+  },
+  {
+    "name": "pingmylinks/searchsubmission",
+    "url": "https://pingmylinks.com/addurl/searchsubmission",
+    "category": "pingmylinks",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://www.pingmylinks.com/addurl/searchsubmission/",
+    "have_credential": false
+  },
+  {
+    "name": "pingmylinks/socialsubmission",
+    "url": "https://pingmylinks.com/addurl/socialsubmission",
+    "category": "pingmylinks",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://www.pingmylinks.com/addurl/socialsubmission/",
+    "have_credential": false
+  },
+  {
+    "name": "search/secretsearchenginelabs.com",
+    "url": "http://secretsearchenginelabs.com",
+    "category": "search",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "http://www.secretsearchenginelabs.com/add-url.php",
+    "have_credential": false
+  },
+  {
+    "name": "search/activesearchresults.com",
+    "url": "https://activesearchresults.com",
+    "category": "search",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://activesearchresults.com/addwebsite.php",
+    "have_credential": true
+  },
+  {
+    "name": "reddit/reddit.com",
+    "url": "https://reddit.com",
+    "category": "reddit",
+    "login_page": "https://reddit.com/login",
+    "register_page": "https://reddit.com/register",
+    "post_page": "https://reddit.com/submit",
+    "have_credential": true
+  },
+  {
+    "name": "twitter/twitter.com",
+    "url": "https://twitter.com",
+    "category": "twitter",
+    "login_page": "https://twitter.com/login",
+    "register_page": "https://twitter.com/i/flow/signup",
+    "post_page": "https://twitter.com/compose/tweet",
+    "have_credential": true
+  },
+  {
+    "name": "facebook/facebook.com",
+    "url": "https://facebook.com",
+    "category": "facebook",
+    "login_page": "https://facebook.com/login",
+    "register_page": "https://facebook.com/r.php",
+    "post_page": "https://facebook.com",
+    "have_credential": true
+  },
+  {
+    "name": "instagram/instagram.com",
+    "url": "https://instagram.com",
+    "category": "instagram",
+    "login_page": "https://instagram.com/accounts/login/",
+    "register_page": "https://instagram.com/accounts/emailsignup/",
+    "post_page": "https://instagram.com",
+    "have_credential": true
+  },
+  {
+    "name": "bookmarking/www.bookmarkzoo.win",
+    "url": "https://bookmarkzoo.win",
+    "category": "bookmarking",
+    "login_page": "https://www.bookmarkzoo.win/pages/login",
+    "register_page": "",
+    "post_page": "https://www.bookmarkzoo.win/pages/submit",
+    "have_credential": true
+  },
+  {
+    "name": "bookmarking/teslabookmarks.com",
+    "url": "https://teslabookmarks.com",
+    "category": "bookmarking",
+    "login_page": "https://teslabookmarks.com/?success=1#tab-login",
+    "register_page": "",
+    "post_page": "https://teslabookmarks.com/index.php/submit-story/",
+    "have_credential": true
+  },
+  {
+    "name": "bookmarking/pearlbookmarking.com",
+    "url": "https://pearlbookmarking.com",
+    "category": "bookmarking",
+    "login_page": "https://pearlbookmarking.com/?success=1#tab-login",
+    "register_page": "",
+    "post_page": "https://pearlbookmarking.com/index.php/submit-story/",
+    "have_credential": true
+  },
+  {
+    "name": "blog/dev.to",
+    "url": "https://dev.to",
+    "category": "blog",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://dev.to/new",
+    "have_credential": true
+  },
+  {
+    "name": "blog/hashnode.com",
+    "url": "https://hashnode.com",
+    "category": "blog",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "",
+    "have_credential": true
+  },
+  {
+    "name": "blog/tumblr.com",
+    "url": "https://tumblr.com",
+    "category": "blog",
+    "login_page": "https://www.tumblr.com/login",
+    "register_page": "https://www.tumblr.com/register",
+    "post_page": "",
+    "have_credential": true
+  },
+  {
+    "name": "forum/delphiforums.com",
+    "url": "https://delphiforums.com",
+    "category": "forum",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "",
+    "have_credential": true
+  },
+  {
+    "name": "forum/city-data.com/forum/",
+    "url": "https://city-data.com/forum/",
+    "category": "forum",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "",
+    "have_credential": true
+  },
+  {
+    "name": "ping/ping.in",
+    "url": "https://ping.in",
+    "category": "ping",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://ping.in/",
+    "have_credential": false
+  },
+  {
+    "name": "ping/prepostseo.com/ping-multiple-urls-online",
+    "url": "https://prepostseo.com/ping-multiple-urls-online",
+    "category": "ping",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://www.prepostseo.com/ping-multiple-urls-online",
+    "have_credential": false
+  },
+  {
+    "name": "ping/backlinkping.com/online-ping-website-tool",
+    "url": "https://backlinkping.com/online-ping-website-tool",
+    "category": "ping",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://www.backlinkping.com/online-ping-website-tool",
+    "have_credential": false
+  },
+  {
+    "name": "ping/excitesubmit.com",
+    "url": "https://excitesubmit.com",
+    "category": "ping",
+    "login_page": "",
+    "register_page": "",
+    "post_page": "https://excitesubmit.com",
+    "have_credential": false
+  },
+  {
+    "name": "forum/openpathshala.com",
+    "url": "https://openpathshala.com",
+    "category": "forum",
+    "login_page": "https://openpathshala.com/user/login",
+    "register_page": "",
+    "post_page": "https://openpathshala.com/node/add/forum/1",
+    "have_credential": true
+  },
+  {
+    "name": "forum/boards.ie",
+    "url": "https://boards.ie",
+    "category": "forum",
+    "login_page": "https://www.boards.ie/entry/signin",
+    "register_page": "",
+    "post_page": "https://www.boards.ie/post/discussion",
+    "have_credential": true
+  },
+  {
+    "name": "blog/blog2learn.com",
+    "url": "https://blog2learn.com",
+    "category": "blog",
+    "login_page": "https://blog2learn.com/login",
+    "register_page": "",
+    "post_page": "https://blog2learn.com/new-post",
+    "have_credential": true
+  },
+  {
+    "name": "blog/uzblog.net",
+    "url": "https://uzblog.net",
+    "category": "blog",
+    "login_page": "https://uzblog.net/login",
+    "register_page": "",
+    "post_page": "https://uzblog.net/new-post",
+    "have_credential": true
+  },
+  {
+    "name": "blog/blogkoo.com",
+    "url": "https://blogkoo.com",
+    "category": "blog",
+    "login_page": "https://blogkoo.com/login",
+    "register_page": "",
+    "post_page": "https://blogkoo.com/new-post",
+    "have_credential": true
+  },
+  {
+    "name": "blog/imblogs.net",
+    "url": "https://imblogs.net",
+    "category": "blog",
+    "login_page": "https://imblogs.net/login",
+    "register_page": "",
+    "post_page": "https://imblogs.net/new-post",
+    "have_credential": true
+  },
+  {
+    "name": "blog/blogwini.com",
+    "url": "https://blogwini.com",
+    "category": "blog",
+    "login_page": "https://blogwini.com/login",
+    "register_page": "",
+    "post_page": "https://blogwini.com/new-post",
+    "have_credential": true
+  },
+  {
+    "name": "blog/ezblogz.com",
+    "url": "https://ezblogz.com",
+    "category": "blog",
+    "login_page": "https://ezblogz.com/login",
+    "register_page": "",
+    "post_page": "https://ezblogz.com/new-post",
+    "have_credential": true
+  },
+  {
+    "name": "blog/total-blog.com",
+    "url": "https://total-blog.com",
+    "category": "blog",
+    "login_page": "https://total-blog.com/login",
+    "register_page": "",
+    "post_page": "https://total-blog.com/new-post",
+    "have_credential": true
+  },
+  {
+    "name": "blog/blog5.net",
+    "url": "https://blog5.net",
+    "category": "blog",
+    "login_page": "https://blog5.net/login",
+    "register_page": "",
+    "post_page": "https://blog5.net/new-post",
+    "have_credential": true
+  },
+  {
+    "name": "blog/shotblogs.com",
+    "url": "https://shotblogs.com",
+    "category": "blog",
+    "login_page": "https://shotblogs.com/login",
+    "register_page": "",
+    "post_page": "https://shotblogs.com/new-post",
+    "have_credential": true
+  }
+] 

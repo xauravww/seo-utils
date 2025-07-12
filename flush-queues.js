@@ -3,8 +3,16 @@ dotenv.config();
 import { createClient } from 'redis';
 
 console.log('[flush-queues.js] REDIS_HOST:', process.env.REDIS_HOST);
+const redisProtocol = process.env.REDIS_PROTOCOL || 'redis://';
+const redisHost = process.env.REDIS_HOST || 'redis';
+const redisPort = process.env.REDIS_PORT || 6379;
+const redisPassword = process.env.REDIS_PASSWORD;
+const redisUrl = redisPassword
+  ? `${redisProtocol}:${encodeURIComponent(redisPassword)}@${redisHost}:${redisPort}`
+  : `${redisProtocol}${redisHost}:${redisPort}`;
+
 const connection = createClient({
-  url: `redis://${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || 6379}`
+  url: redisUrl
 });
 connection.on('error', (err) => {
   console.error('[flush-queues.js][REDIS ERROR]', err);

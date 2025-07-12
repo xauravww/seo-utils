@@ -90,8 +90,16 @@ export function log(requestId, data) {
 
 // Redis Pub/Sub for cross-process log relaying
 console.log('[websocketLogger.js] REDIS_HOST:', process.env.REDIS_HOST);
+const redisProtocol = process.env.REDIS_PROTOCOL || 'redis://';
+const redisHost = process.env.REDIS_HOST || 'redis';
+const redisPort = process.env.REDIS_PORT || 6379;
+const redisPassword = process.env.REDIS_PASSWORD;
+const redisUrl = redisPassword
+  ? `${redisProtocol}:${encodeURIComponent(redisPassword)}@${redisHost}:${redisPort}`
+  : `${redisProtocol}${redisHost}:${redisPort}`;
+
 const redisSubscriber = createClient({
-  url: `redis://${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || 6379}`
+  url: redisUrl
 });
 redisSubscriber.on('error', (err) => {
   console.error('[websocketLogger.js][REDIS ERROR]', err);

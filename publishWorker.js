@@ -182,15 +182,18 @@ const run = async (workerData) => {
     }
 };
 console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
+
 // Replace connection and redisPublisher with ioredis clients
-const connection = new Redis({
-  host: process.env.PUBLISH_REDIS_HOST || 'redis',
-  port: process.env.PUBLISH_REDIS_PORT ? parseInt(process.env.REDIS_PORT, 10) : 6379,
-});
-const redisPublisher = new Redis({
-  host: process.env.PUBLISH_REDIS_HOST || 'redis',
-  port: process.env.PUBLISH_REDIS_HOST ? parseInt(process.env.REDIS_PORT, 10) : 6379,
-});
+const redisProtocol = process.env.REDIS_PROTOCOL || 'redis://';
+const redisHost = process.env.PUBLISH_REDIS_HOST || process.env.REDIS_HOST || 'redis';
+const redisPort = process.env.PUBLISH_REDIS_PORT || process.env.REDIS_PORT || 6379;
+const redisPassword = process.env.PUBLISH_REDIS_PASSWORD || process.env.REDIS_PASSWORD;
+const redisUrl = redisPassword
+  ? `${redisProtocol}:${encodeURIComponent(redisPassword)}@${redisHost}:${redisPort}`
+  : `${redisProtocol}${redisHost}:${redisPort}`;
+
+const connection = new Redis(redisUrl);
+const redisPublisher = new Redis(redisUrl);
 function publishLog(requestId, message, level = 'info') {
   const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
   redisPublisher.publish(`logs:${requestId}`, payload);
