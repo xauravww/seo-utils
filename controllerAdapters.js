@@ -1,8 +1,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import { chromium } from 'playwright-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth'
-chromium.use(StealthPlugin())
+import { chromium } from 'patchright';
+// import StealthPlugin from 'puppeteer-extra-plugin-stealth'
+// chromium.use(StealthPlugin())
 import axios from 'axios';
 import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
@@ -2308,6 +2308,9 @@ class BoardsIEForumAdapter extends BaseAdapter {
             await cfBypasser.bypass();
             // --- End bypass logic ---
 
+            await page.goto('https://www.boards.ie/post/discussion', { waitUntil: 'domcontentloaded' });
+            this.log('[EVENT] Navigated to new discussion page.', 'detail', false);
+
             // Step 5: Select category 'Internet Marketing / SEO' (value 985)
             const categorySelector = 'select#Form_CategoryID[name="CategoryID"]';
             await page.waitForSelector(categorySelector, { timeout: 60000 });
@@ -2319,13 +2322,20 @@ class BoardsIEForumAdapter extends BaseAdapter {
             this.log('[EVENT] Filled title.', 'detail', false);
 
             // Step 7: Fill body (contenteditable div)
-            // The body field is a Slate.js editor, so we need to set innerHTML
-            await page.evaluate((html) => {
-                const editable = document.querySelector('div[contenteditable="true"][data-slate-editor="true"]');
-                if (editable) {
-                    editable.innerHTML = html;
-                }
-            }, body);
+            // Click the emoji picker button to activate the editor
+            await page.waitForSelector('button#emojiFlyout-0-handle', { timeout: 10000 });
+            await page.click('button#emojiFlyout-0-handle');
+            // Focus the contenteditable div
+            await page.waitForSelector('div[contenteditable="true"][data-slate-editor="true"]', { timeout: 10000 });
+            const editableHandle = await page.$('div[contenteditable="true"][data-slate-editor="true"]');
+            await editableHandle.focus();
+            // Clear any existing content (optional)
+            await page.keyboard.press('Control+A');
+            await page.keyboard.press('Backspace');
+            // Type the body content as a real user would
+            await page.keyboard.type(body);
+            this.log('[EVENT] Filled body using keyboard.type for Slate.js editor.', 'detail', false);
+
             this.log('[EVENT] Filled body.', 'detail', false);
 
             // Step 8: Click 'Post Discussion'

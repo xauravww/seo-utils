@@ -27,6 +27,7 @@
     "minimist": "^1.2.8",
     "node-reddit-js": "^0.0.11",
     "oauth": "^0.10.2",
+    "patchright": "^1.52.5",
     "playright": "^0.0.22",
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
