@@ -48,6 +48,7 @@ import {
   SocialSubmissionEngineAdapter,
   DevToAdapter,
   HashnodeAdapter,
+  PlurkAdapter,
   TumblrAdapter,PrePostSEOPingAdapter,BacklinkPingAdapter,ExciteSubmitAdapter
 } from './adapters/index.js';
 import BaseAdapter from './adapters/BaseAdapter.js';
@@ -100,6 +101,8 @@ const adapterMap = {
     '../controllers/social_media/twitterController.js': TwitterAdapter,
     '../controllers/social_media/facebookController.js': FacebookAdapter,
     '../controllers/social_media/instagramController.js': InstagramAdapter,
+    'plurk.com': PlurkAdapter,
+    'social_media': PlurkAdapter,
     '../controllers/bookmarking/bookmarkZooController.js': BookmarkZooAdapter,
     '../controllers/bookmarking/teslaBookmarksController.js': TeslaPearlBookmarkingAdapter,
     'directory/gainweb': GainWebAdapter,

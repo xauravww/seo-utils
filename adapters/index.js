@@ -10,6 +10,7 @@ import RedditAdapter from './social_media/RedditAdapter.js';
 import TwitterAdapter from './social_media/TwitterAdapter.js';
 import FacebookAdapter from './social_media/FacebookAdapter.js';
 import InstagramAdapter from './social_media/InstagramAdapter.js';
+import PlurkAdapter from './social_media/PlurkAdapter.js';
 import SecretSearchEngineLabsAdapter from './search/SecretSearchEngineLabsAdapter.js';
 import ActiveSearchResultsAdapter from './search/ActiveSearchResultsAdapter.js';
 import BookmarkZooAdapter from './bookmarking/BookmarkZooAdapter.js';
@@ -38,6 +39,7 @@ export {
   TwitterAdapter,
   FacebookAdapter,
   InstagramAdapter,
+  PlurkAdapter,
   SecretSearchEngineLabsAdapter,
   ActiveSearchResultsAdapter,
   BookmarkZooAdapter,
@@ -49,4 +51,4 @@ export {
   DevToAdapter,
   HashnodeAdapter,
   TumblrAdapter,PrePostSEOPingAdapter,BacklinkPingAdapter,ExciteSubmitAdapter
-}; 
+};
