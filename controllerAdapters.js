@@ -19,6 +19,7 @@ import { sendTweet } from './controllers/social_media/twitterController.js';
 import { postToFacebook } from './controllers/social_media/facebookController.js';
 import { postToInstagram } from './controllers/social_media/instagramController.js';
 import { UBookmarkingAdapter } from './controllers/bookmarking/ubookmarkingController.js';
+import GenericBookmarking33Adapter from './adapters/bookmarking/GenericBookmarking33.js';
 import { OAuth } from 'oauth';
 import { createClient } from 'redis';
 import TurnstileBypass from 'turnstile-bypass';
@@ -105,6 +106,8 @@ const adapterMap = {
     'directory/socialsubmissionengine': SocialSubmissionEngineAdapter,
     'directory': GainWebAdapter,
     'bookmarking/ubookmarking': UBookmarkingAdapter,
+    'bookmarking': GenericBookmarking33Adapter,
+    'bookmarkdrive.com': GenericBookmarking33Adapter,
     'devto': DevToAdapter,
     'blog/devto': DevToAdapter,
     'hashnode': HashnodeAdapter,

@@ -238,13 +238,13 @@ export const publish = async (req, res) => {
           })
         );
         // Add a dummy job to trigger aggregation and update
-        await queue.add('publishWebsite', {
-          requestId,
-          campaignId: campaign_id,
-          userId: user_id,
-          isDummy: true,
-          error: jobData.error || 'No eligible websites found for publication.'
-        });
+        // await queue.add('publishWebsite', {
+        //   requestId,
+        //   campaignId: campaign_id,
+        //   userId: user_id,
+        //   isDummy: true,
+        //   error: jobData.error || 'No eligible websites found for publication.'
+        // });
       }
       res.status(400).json({
         message: jobData.error || 'No eligible websites found for publication.',
