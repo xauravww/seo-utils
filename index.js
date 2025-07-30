@@ -84,9 +84,16 @@ app.use('/admin/queues', serverAdapter.getRouter());
 setupWebSocketServer(server);
 
 // Setup BullMQ QueueEvents listeners to forward logs to websocketLogger
+console.log('[BullMQ] Setting up QueueEvents for categories:', categories);
 for (const cat of categories) {
   const queueName = `${cat}Queue`;
   const queueEvents = new QueueEvents(queueName, { connection: redisConnectionConfig });
+  console.log(`[BullMQ] QueueEvents set up for ${queueName}`);
+
+  // Test QueueEvents connection
+  queueEvents.on('waiting', ({ jobId }) => {
+    console.log(`[DEBUG] [${cat}] Job ${jobId} is waiting`);
+  });
 
   // Helper to get requestId, campaignId, userId, etc. from jobId
   async function getJobData(jobId) {
@@ -105,10 +112,14 @@ for (const cat of categories) {
   }
 
   queueEvents.on('completed', async ({ jobId, returnvalue }) => {
+    console.log(`[DEBUG] [${cat}] Job ${jobId} completed event triggered with returnvalue:`, returnvalue);
     const jobData = await getJobData(jobId);
     const requestId = jobData?.requestId;
     const campaign_id = jobData?.campaignId;
     const user_id = jobData?.userId;
+    
+    console.log(`[${requestId}] [${cat}] Job ${jobId} completed for campaign ${campaign_id}`);
+    
     // Remove jobId from campaign set
     if (campaign_id) {
       await redis.srem(`campaign_jobs:${campaign_id}`, jobId);
@@ -116,25 +127,49 @@ for (const cat of categories) {
       const message = returnvalue || {};
       if (message.status === 'done') {
         await incrementCampaignSuccess(campaign_id);
+        console.log(`[${requestId}] [${cat}] Job ${jobId} marked as successful`);
       }
       const remaining = await redis.scard(`campaign_jobs:${campaign_id}`);
+      console.log(`[${requestId}] Campaign ${campaign_id}: ${remaining} jobs remaining`);
       if (remaining === 0) {
-        // All jobs for this campaign are done, aggregate logs
-        const logEntries = await redis.lrange(`campaign_logs:${campaign_id}`, 0, -1);
+        // All jobs for this campaign are done, get aggregated logs
+        console.log(`[${requestId}] Starting log aggregation for campaign ${campaign_id}`);
+        const campaignLogsData = await redis.get(`campaign_logs:${campaign_id}`);
         let aggregatedLogs = {};
-        for (const entry of logEntries) {
-          const { logs } = JSON.parse(entry);
-          for (const [cat, logObj] of Object.entries(logs)) {
-            if (!aggregatedLogs[cat]) aggregatedLogs[cat] = { logs: [], result: '' };
-            aggregatedLogs[cat].logs.push(...(logObj.logs || []));
-            aggregatedLogs[cat].result = logObj.result || aggregatedLogs[cat].result;
+        
+        if (campaignLogsData) {
+          try {
+            const parsedData = JSON.parse(campaignLogsData);
+            // The logs are already aggregated in our new format
+            aggregatedLogs = parsedData.logs || {};
+            console.log(`[${requestId}] Found ${Object.keys(aggregatedLogs).length} log categories for campaign ${campaign_id}`);
+          } catch (parseError) {
+            console.error(`[${requestId}] Error parsing campaign logs for ${campaign_id}:`, parseError);
+            // Fallback: try old format in case of mixed data
+            try {
+              const logEntries = await redis.lrange(`campaign_logs:${campaign_id}`, 0, -1);
+              console.log(`[${requestId}] Fallback: found ${logEntries.length} log entries in old format`);
+              for (const entry of logEntries) {
+                const { logs } = JSON.parse(entry);
+                for (const [cat, logObj] of Object.entries(logs)) {
+                  if (!aggregatedLogs[cat]) aggregatedLogs[cat] = { logs: [], result: '' };
+                  aggregatedLogs[cat].logs.push(...(logObj.logs || []));
+                  aggregatedLogs[cat].result = logObj.result || aggregatedLogs[cat].result;
+                }
+              }
+            } catch (fallbackError) {
+              console.error(`[${requestId}] Fallback parsing also failed for ${campaign_id}:`, fallbackError);
+            }
           }
+        } else {
+          console.log(`[${requestId}] No campaign logs found for ${campaign_id}`);
         }
         // Compose result string
         const totalCount = parseInt(await redis.get(`campaign_total:${campaign_id}`) || '0', 10);
         const successCount = parseInt(await redis.get(`campaign_success:${campaign_id}`) || '0', 10);
         const resultString = `${successCount}/${totalCount}`;
         const finalStatus = successCount > 0 ? 'completed' : 'failed';
+        console.log(`[${requestId}] Campaign ${campaign_id} final stats: ${resultString}, status: ${finalStatus}`);
         if (campaign_id && user_id) {
           try {
             const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
@@ -171,6 +206,7 @@ for (const cat of categories) {
           console.log(`[${requestId}] Skipping campaign update. Missing campaignId or userId.`);
         }
         // Clean up Redis keys
+        console.log(`[${requestId}] Cleaned up Redis keys for campaign ${campaign_id}`);
         await redis.del(`campaign_jobs:${campaign_id}`);
         await redis.del(`campaign_total:${campaign_id}`);
         await redis.del(`campaign_success:${campaign_id}`);

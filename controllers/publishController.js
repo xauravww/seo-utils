@@ -28,6 +28,13 @@ const redisUrl = redisPassword
 export const redisConnectionConfig = { url: redisUrl };
 const redisClient = new Redis(redisUrl);
 
+// Helper function to track campaign jobs (moved here to avoid circular dependency)
+async function trackCampaignJob(campaignId, jobId) {
+  if (campaignId && jobId) {
+    await redisClient.sadd(`campaign_jobs:${campaignId}`, jobId);
+  }
+}
+
 // Define all main categories
 const categories = [
   'blog',
@@ -205,8 +212,11 @@ export const publish = async (req, res) => {
     // Use processPublishJob to get eligible websites and job data
     const jobData = await processPublishJob(req.body, requestId);
     if (jobData && jobData.websites && Array.isArray(jobData.websites) && jobData.websites.length > 0) {
+      const jobIds = [];
+      
+      // Create jobs and collect their IDs
       for (const website of jobData.websites) {
-        await queue.add('publishWebsite', {
+        const job = await queue.add('publishWebsite', {
           requestId, // unique per job for traceability
           website,
           content: jobData.content,
@@ -214,37 +224,61 @@ export const publish = async (req, res) => {
           userId: jobData.userId,
           minimumInclude: jobData.minimumInclude
         });
+        jobIds.push(job.id);
       }
+      
+      // Track campaign jobs and set total count if we have a campaign ID
+      if (jobData.campaignId) {
+        console.log(`[${requestId}] Created and tracked ${jobIds.length} jobs for campaign ${jobData.campaignId}`);
+        
+        // Set total count for the campaign
+        await redisClient.set(`campaign_total:${jobData.campaignId}`, jobIds.length);
+        
+        // Track each job ID for this campaign
+        for (const jobId of jobIds) {
+          await trackCampaignJob(jobData.campaignId, jobId);
+        }
+      }
+      
       res.status(202).json({
         message: `Request received. ${jobData.websites.length} jobs queued (one per website).`,
         requestId: requestId
       });
     } else {
-      // No eligible websites: push log to Redis and add dummy job
+      // No eligible websites: push log to Redis using merge function
       const campaign_id = jobData.campaignId || (req.body.info && req.body.info.campaign_id);
       const user_id = jobData.userId || (req.body.info && req.body.info.user_id);
       if (campaign_id) {
-        await redisClient.rpush(
-          `campaign_logs:${campaign_id}`,
-          JSON.stringify({
-            userId: user_id,
-            website: null,
-            logs: {
-              uncategorized: {
-                logs: [{ message: jobData.error || 'No eligible websites found for publication.', level: 'error' }],
-                result: 'failure',
-              }
-            }
-          })
-        );
-        // Add a dummy job to trigger aggregation and update
-        // await queue.add('publishWebsite', {
-        //   requestId,
-        //   campaignId: campaign_id,
-        //   userId: user_id,
-        //   isDummy: true,
-        //   error: jobData.error || 'No eligible websites found for publication.'
-        // });
+        // Use the same merge logic as in publishWorker.js
+        const key = `campaign_logs:${campaign_id}`;
+        const existingData = await redisClient.get(key);
+        let mergedLogs = {};
+        
+        if (existingData) {
+          try {
+            mergedLogs = JSON.parse(existingData);
+          } catch (parseError) {
+            console.error(`[publishController] Error parsing existing data for campaign ${campaign_id}:`, parseError);
+            mergedLogs = {};
+          }
+        }
+        
+        // Initialize structure if needed
+        if (!mergedLogs.userId) mergedLogs.userId = user_id;
+        if (!mergedLogs.logs) mergedLogs.logs = {};
+        if (!mergedLogs.logs.uncategorized) {
+          mergedLogs.logs.uncategorized = { logs: [], result: 'pending' };
+        }
+        
+        // Add error log
+        mergedLogs.logs.uncategorized.logs.push({
+          message: jobData.error || 'No eligible websites found for publication.',
+          level: 'error'
+        });
+        mergedLogs.logs.uncategorized.result = 'failure';
+        
+        // Store merged logs back to Redis
+        await redisClient.set(key, JSON.stringify(mergedLogs));
       }
       res.status(400).json({
         message: jobData.error || 'No eligible websites found for publication.',

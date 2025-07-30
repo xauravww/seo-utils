@@ -55,6 +55,12 @@ const processWebsite = async (jobDetails, job) => {
     const { requestId, website, content, campaignId } = jobDetails;
     const { url, category } = website;
     console.log(`[${requestId}] [Worker] Starting job for ${url}`);
+    console.log(`[DEBUG] [${requestId}] processWebsite called with:`, {
+        url,
+        category,
+        campaignId,
+        hasCredentials: !!website.credentials
+    });
 
     publishLog(requestId, `[Worker] Starting job for ${url}`, 'info');
 
@@ -66,8 +72,22 @@ const processWebsite = async (jobDetails, job) => {
     // 2. If adapter exists, run it
     if (adapter) {
         console.log(`[${requestId}] [Worker] Adapter found, executing publish for ${url}.`);
+        console.log(`[DEBUG] [${requestId}] Adapter type:`, adapter.constructor.name);
+        
         const publishResult = await adapter.publish(job); // Pass job to publish()
+        console.log(`[DEBUG] [${requestId}] publishResult:`, {
+            success: publishResult.success,
+            hasPostUrl: !!publishResult.postUrl,
+            hasError: !!publishResult.error
+        });
+        
         adapterLogs = adapter.getCollectedLogs(); // Get logs collected by this adapter
+        console.log(`[DEBUG] [${requestId}] adapterLogs from getCollectedLogs():`, {
+            isArray: Array.isArray(adapterLogs),
+            length: adapterLogs ? adapterLogs.length : 'null/undefined',
+            logs: adapterLogs
+        });
+        
         if (publishResult.success) {
             console.log(`[${requestId}] [Worker] Adapter publish completed for ${url}.`);
             if (publishResult.postUrl) {
@@ -78,26 +98,47 @@ const processWebsite = async (jobDetails, job) => {
         } else {
             console.error(`[${requestId}] [Worker] Adapter publish failed for ${url}: ${publishResult.error}`);
         }
+        
         // After result is created (success or failure)
         const result = { ...publishResult, category, adapterLogs };
+        console.log(`[DEBUG] [${requestId}] Final result object:`, {
+            success: result.success,
+            category: result.category,
+            adapterLogsLength: result.adapterLogs ? result.adapterLogs.length : 'null/undefined'
+        });
+        
         // Always push at least one log to Redis for aggregation
         if (jobDetails.campaignId) {
-            const logsToPush = (result.adapterLogs && result.adapterLogs.length > 0)
-              ? result.adapterLogs
-              : [{ message: 'No logs collected by adapter.', level: 'info' }];
-            await connection.rpush(
-              `campaign_logs:${jobDetails.campaignId}`,
-              JSON.stringify({
+            // Ensure we have meaningful logs
+            let logsToPush = [];
+            if (result.adapterLogs && Array.isArray(result.adapterLogs) && result.adapterLogs.length > 0) {
+                logsToPush = result.adapterLogs;
+            } else {
+                // Create a meaningful default log based on the result
+                const defaultMessage = result.success 
+                    ? `Successfully processed ${jobDetails.website.url}` 
+                    : `Failed to process ${jobDetails.website.url}: ${result.error || 'Unknown error'}`;
+                logsToPush = [{ message: defaultMessage, level: result.success ? 'success' : 'error' }];
+            }
+            
+            console.log(`[DEBUG] [${requestId}] logsToPush:`, {
+                length: logsToPush.length,
+                logs: logsToPush
+            });
+            
+            // Use parent category for better grouping
+            const parentCategory = getParentCategory(result.category);
+            
+            // Merge logs with existing campaign logs
+            await mergeCampaignLogs(jobDetails.campaignId, {
                 userId: jobDetails.userId,
                 website: jobDetails.website.url,
-                logs: {
-                  [result.category]: {
-                    logs: logsToPush,
-                    result: result.success ? 'success' : 'failure',
-                  }
-                }
-              })
-            );
+                category: parentCategory,
+                logs: logsToPush,
+                result: result.success ? 'success' : 'failure'
+            });
+            
+            console.log(`[DEBUG] [${requestId}] Successfully merged logs to Redis campaign_logs:${jobDetails.campaignId}`);
         }
         return result;
     } else {
@@ -106,19 +147,14 @@ const processWebsite = async (jobDetails, job) => {
         publishLog(requestId, message, 'warning');
         // Push logs to Redis for aggregation, regardless of success
         if (jobDetails.campaignId) {
-            await connection.rpush(
-              `campaign_logs:${jobDetails.campaignId}`,
-              JSON.stringify({
+            const parentCategory = getParentCategory(category);
+            await mergeCampaignLogs(jobDetails.campaignId, {
                 userId: jobDetails.userId,
                 website: jobDetails.website.url,
-                logs: {
-                  'uncategorized': {
-                    logs: [{ message, level: 'warning' }],
-                    result: 'failure',
-                  }
-                }
-              })
-            );
+                category: parentCategory,
+                logs: [{ message, level: 'warning' }],
+                result: 'failure'
+            });
         }
         return { success: false, error: message, category, adapterLogs: [{ message, level: 'warning' }] }; // Return failure if no adapter
     }
@@ -206,6 +242,52 @@ redisPublisher.on('error', (err) => {
   console.error('[publishWorker.js][REDIS ERROR][redisPublisher]', err);
 });
 
+// Function to merge campaign logs atomically
+const mergeCampaignLogs = async (campaignId, newLogData) => {
+  const key = `campaign_logs:${campaignId}`;
+  
+  try {
+    // Get existing logs
+    const existingData = await connection.get(key);
+    let mergedLogs = {};
+    
+    if (existingData) {
+      try {
+        mergedLogs = JSON.parse(existingData);
+      } catch (parseError) {
+        console.error(`[mergeCampaignLogs] Error parsing existing data for campaign ${campaignId}:`, parseError);
+        mergedLogs = {};
+      }
+    }
+    
+    // Initialize structure if needed
+    if (!mergedLogs.userId) mergedLogs.userId = newLogData.userId;
+    if (!mergedLogs.logs) mergedLogs.logs = {};
+    if (!mergedLogs.logs[newLogData.category]) {
+      mergedLogs.logs[newLogData.category] = { logs: [], result: 'pending' };
+    }
+    
+    // Add new logs to existing category logs
+    mergedLogs.logs[newLogData.category].logs.push(...newLogData.logs);
+    
+    // Update result status (keep 'failure' if any job failed, otherwise 'success')
+    if (newLogData.result === 'failure') {
+      mergedLogs.logs[newLogData.category].result = 'failure';
+    } else if (mergedLogs.logs[newLogData.category].result !== 'failure') {
+      mergedLogs.logs[newLogData.category].result = 'success';
+    }
+    
+    // Store merged logs back to Redis
+    await connection.set(key, JSON.stringify(mergedLogs));
+    
+    console.log(`[mergeCampaignLogs] Successfully merged logs for campaign ${campaignId}, category ${newLogData.category}`);
+  } catch (error) {
+    console.error(`[mergeCampaignLogs] Error merging logs for campaign ${campaignId}:`, error);
+    // Fallback: store as individual entry if merge fails
+    await connection.rpush(key + '_fallback', JSON.stringify(newLogData));
+  }
+};
+
 // --- BullMQ Worker Setup ---
 const queueConcurrency = parseInt(process.env.QUEUE_CONCURRENCY, 10) || 1;
 
@@ -238,12 +320,44 @@ const startAllCategoryWorkers = () => {
           const { website, content, campaignId, userId, minimumInclude, requestId: reqId } = job.data;
           requestId = reqId;
           await job.log(`[BullMQ] [${category}] Starting job ${job.id} (requestId: ${requestId})`);
-          // Let errors from processWebsite throw so BullMQ marks the job as failed
-          const result = await processWebsite({ requestId, website, content, campaignId }, job);
-          return {
-            status: result.success ? 'done' : 'error',
-            ...result
-          };
+          
+          try {
+            // Process the website
+            const result = await processWebsite({ requestId, website, content, campaignId, userId }, job);
+            
+            // Always return a result, even for failures
+            return {
+              status: result.success ? 'done' : 'error',
+              ...result
+            };
+          } catch (error) {
+            // Handle unexpected errors - still push logs to Redis
+            console.error(`[BullMQ] [${category}] Unexpected error in job ${job.id}:`, error);
+            await job.log(`[ERROR] Unexpected error: ${error.message}`);
+            
+            // Push error log to Redis for campaign tracking
+            if (campaignId) {
+              const parentCategory = getParentCategory(website.category);
+              await mergeCampaignLogs(campaignId, {
+                userId: userId,
+                website: website.url,
+                category: parentCategory,
+                logs: [{ 
+                  message: `[SYSTEM ERROR] Unexpected error processing ${website.url}: ${error.message}`, 
+                  level: 'error' 
+                }],
+                result: 'failure'
+              });
+            }
+            
+            // Return error status but don't throw - let BullMQ handle it
+            return {
+              status: 'error',
+              success: false,
+              error: error.message,
+              category: website.category
+            };
+          }
         }
         // Call processWebsite with job instance
         // return await processWebsite(jobData, job); // <-- Remove this line
