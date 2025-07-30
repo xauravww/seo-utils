@@ -131,9 +131,6 @@ class WordPressAdapter extends BaseAdapter {
             throw new Error('Could not find the final post URL in the response page. Check logs for HTML snippet.');
         }
 
-        const successMessage = `Successfully extracted post URL: ${postUrl}`;
-        this.log(successMessage, 'success', true);
-        console.log(`[${this.requestId}] [WordPressAdapter] ${successMessage}`);
         return postUrl;
     }
 
