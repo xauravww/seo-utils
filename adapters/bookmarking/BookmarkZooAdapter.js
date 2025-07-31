@@ -62,7 +62,7 @@ class BookmarkZooAdapter extends BaseAdapter {
             this.log('[EVENT] Screenshot taken after completion.', 'info', true);
             const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
             const cloudinaryUrl = cloudinaryUploadResult.secure_url;
-            this.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`, 'info', true);
+            this.logScreenshotUploaded(cloudinaryUrl);
             console.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUrl}`);
             fs.unlinkSync(screenshotPath);
             return { success: true, postUrl: postUrl, cloudinaryUrl: cloudinaryUrl };

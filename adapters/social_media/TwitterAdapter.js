@@ -22,7 +22,7 @@ class TwitterAdapter extends BaseAdapter {
             const tweetResult = await sendTweet({ appKey, appSecret, accessToken, accessSecret }, tweetText);
 
             if (tweetResult.success) {
-                this.log(`[SUCCESS] Tweet posted successfully! URL: ${tweetResult.tweetUrl}`, 'success', true);
+                this.logPublicationSuccess(tweetResult.tweetUrl);
                 return { success: true, tweetUrl: tweetResult.tweetUrl };
             } else {
                 throw new Error(tweetResult.error);

@@ -47,7 +47,7 @@ class PingInAdapter extends BaseAdapter {
             this.log('[EVENT] Screenshot taken after submission.', 'info', true);
             const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
             const cloudinaryUrl = cloudinaryUploadResult.secure_url;
-            this.log(`[EVENT] Screenshot uploaded to Cloudinary: ${cloudinaryUrl}`, 'info', true);
+            this.logScreenshotUploaded(cloudinaryUrl);
             console.log(`[EVENT] Screenshot uploaded to Cloudinary: ${cloudinaryUrl}`);
             fs.unlinkSync(screenshotPath);
             return { success: true, message: 'Ping submitted and screenshot taken.', screenshotUrl: cloudinaryUrl };
@@ -58,7 +58,7 @@ class PingInAdapter extends BaseAdapter {
                 await page.screenshot({ path: errorScreenshotPath, fullPage: true });
                 this.log(`[EVENT] Error screenshot taken: ${errorScreenshotPath}`, 'info', true);
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
-                this.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`, 'info', true);
+                this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
                 console.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`);
                 fs.unlinkSync(errorScreenshotPath);
             }

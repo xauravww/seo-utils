@@ -78,7 +78,7 @@ class OpenPathshalaForumAdapter extends BaseAdapter {
             const postCloudinaryUploadResult = await cloudinary.uploader.upload(postScreenshotPath);
             postScreenshotUrl = postCloudinaryUploadResult.secure_url;
             fs.unlinkSync(postScreenshotPath);
-            this.log(`[SCREENSHOT] Post screenshot uploaded: ${postScreenshotUrl}`, 'info', true);
+            this.logScreenshotUploaded(postScreenshotUrl);
 
             return { success: true, postUrl: postedUrl, postScreenshotUrl };
         } catch (error) {
@@ -88,7 +88,7 @@ class OpenPathshalaForumAdapter extends BaseAdapter {
                 await page.screenshot({ path: errorScreenshotPath, fullPage: true });
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                 fs.unlinkSync(errorScreenshotPath);
-                this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
+                this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
                 throw error;
             }
             throw error;

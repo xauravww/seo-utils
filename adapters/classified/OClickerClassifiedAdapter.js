@@ -40,7 +40,7 @@ class OClickerClassifiedAdapter extends BaseAdapter {
             this.log(`[DEBUG] Screenshot taken before clicking submit: ${preClickScreenshotPath}`, 'detail', true);
             try {
                 const preClickCloudinary = await cloudinary.uploader.upload(preClickScreenshotPath);
-                this.log(`[DEBUG] Pre-submit screenshot uploaded: ${preClickCloudinary.secure_url}`, 'detail', true);
+                this.logScreenshotUploaded(preClickCloudinary.secure_url);
                 fs.unlinkSync(preClickScreenshotPath);
             } catch (e) {
                 this.log(`[WARNING] Could not upload/delete pre-submit screenshot: ${e.message}`, 'warning', true);
@@ -76,7 +76,7 @@ class OClickerClassifiedAdapter extends BaseAdapter {
             this.log(`[DEBUG] Screenshot taken after clicking submit: ${postClickScreenshotPath}`, 'detail', true);
             try {
                 const postClickCloudinary = await cloudinary.uploader.upload(postClickScreenshotPath);
-                this.log(`[DEBUG] Post-submit screenshot uploaded: ${postClickCloudinary.secure_url}`, 'detail', true);
+                this.logScreenshotUploaded(postClickCloudinary.secure_url);
                 fs.unlinkSync(postClickScreenshotPath);
             } catch (e) {
                 this.log(`[WARNING] Could not upload/delete post-submit screenshot: ${e.message}`, 'warning', true);
@@ -101,7 +101,7 @@ class OClickerClassifiedAdapter extends BaseAdapter {
             this.log('[EVENT] Screenshot taken after submission.', 'info', true);
             const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
             screenshotUrl = cloudinaryUploadResult.secure_url;
-            this.log(`[EVENT] Screenshot uploaded to Cloudinary: ${screenshotUrl}`, 'info', true);
+            this.logScreenshotUploaded(screenshotUrl);
             fs.unlinkSync(screenshotPath);
             return {
                 success: true,
@@ -115,7 +115,7 @@ class OClickerClassifiedAdapter extends BaseAdapter {
                 await page.screenshot({ path: errorScreenshotPath, fullPage: true });
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                 fs.unlinkSync(errorScreenshotPath);
-                this.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`, 'info', true);
+                this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
             }
             throw error;
         } finally {

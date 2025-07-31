@@ -22,7 +22,7 @@ class FacebookAdapter extends BaseAdapter {
             const facebookPostResult = await postToFacebook({ appId, appSecret, pageAccessToken, pageId }, message);
 
             if (facebookPostResult.success) {
-                this.log(`[SUCCESS] Facebook post created successfully! URL: ${facebookPostResult.postUrl}`, 'success', true);
+                this.logPublicationSuccess(facebookPostResult.postUrl);
                 return { success: true, postUrl: facebookPostResult.postUrl };
             } else {
                 throw new Error(facebookPostResult.error);

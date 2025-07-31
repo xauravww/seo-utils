@@ -97,7 +97,7 @@ class PlurkAdapter extends BaseAdapter {
       const plurkId = response.data?.plurk_id;
       if (plurkId) {
         const postUrl = `https://www.plurk.com/p/${plurkId.toString(36)}`;
-        this.log(`[SUCCESS] Plurk created successfully: ${postUrl}`, 'success', true);
+        this.logPublicationSuccess(postUrl);
         return { success: true, postUrl: postUrl, data: response.data };
       } else {
         this.log(`[SUCCESS] Plurk created (but no plurk_id): ${JSON.stringify(response.data)}`, 'success', true);

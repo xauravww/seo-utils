@@ -45,6 +45,19 @@ class BaseAdapter {
         throw new Error('Publish method not implemented!');
     }
 
+    // Standardized logging methods for consistent parsing
+    logPublicationSuccess(url) {
+        this.log(`Publication successful! URL: ${url}`, 'success', true);
+    }
+
+    logScreenshotUploaded(url) {
+        this.log(`Screenshot uploaded: ${url}`, 'info', true);
+    }
+
+    logErrorScreenshotUploaded(url) {
+        this.log(`Error screenshot uploaded: ${url}`, 'error', true);
+    }
+
     // Helper to ensure BullMQ marks job as failed on error
     handleError(error, page, browser) {
         this.log(`[ERROR] ${this.constructor.name} error: ${error.message}`, 'error', true);
@@ -55,7 +68,7 @@ class BaseAdapter {
                 try {
                     const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                     fs.unlinkSync(errorScreenshotPath);
-                    this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
+                    this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
                 } catch { }
             }
             if (browser) await browser.close().catch(() => { });

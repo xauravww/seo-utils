@@ -137,7 +137,7 @@ class PingMyLinksAdapter extends BaseAdapter {
                     await page.screenshot({ path: screenshotCompletionPath, fullPage: true });
                     this.log('[EVENT] Screenshot taken after completion.', 'info', true);
                     const cloudinaryUploadCompletionResult = await cloudinary.uploader.upload(screenshotCompletionPath);
-                    this.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUploadCompletionResult.secure_url}`, 'info', true);
+                    this.logScreenshotUploaded(cloudinaryUploadCompletionResult.secure_url);
                     console.log(`[EVENT] Completion screenshot uploaded to Cloudinary: ${cloudinaryUploadCompletionResult.secure_url}`);
                     fs.unlinkSync(screenshotCompletionPath);
                 } else {

@@ -79,7 +79,7 @@ class ExciteSubmitAdapter extends BaseAdapter {
             this.log('[EVENT] Screenshot taken after 15s inactivity.', 'info', true);
             const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
             screenshotUrl = cloudinaryUploadResult.secure_url;
-            this.log(`[EVENT] Screenshot uploaded to Cloudinary: ${screenshotUrl}`, 'info', true);
+            this.logScreenshotUploaded(screenshotUrl);
             console.log(`[EVENT] Screenshot uploaded to Cloudinary: ${screenshotUrl}`);
             fs.unlinkSync(screenshotPath);
 
@@ -91,7 +91,7 @@ class ExciteSubmitAdapter extends BaseAdapter {
                 await page.screenshot({ path: errorScreenshotPath, fullPage: true });
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                 fs.unlinkSync(errorScreenshotPath);
-                this.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`, 'info', true);
+                this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
             }
             throw error;
         } finally {

@@ -25,7 +25,7 @@ class RedditAdapter extends BaseAdapter {
             this.log('[EVENT] Submitting post to Reddit...', 'detail', false);
             const postUrl = await submitRedditPost(accessToken, subreddit, title, body, username);
 
-            this.log(`[SUCCESS] Reddit post created successfully! URL: ${postUrl}`, 'success', true);
+            this.logPublicationSuccess(postUrl);
             return { success: true, postUrl: postUrl };
 
         } catch (error) {

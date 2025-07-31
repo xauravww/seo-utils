@@ -30,7 +30,7 @@ class DevToAdapter extends BaseAdapter {
                 }
             });
             const postUrl = res.data.url;
-            this.log(`Dev.to post created: ${postUrl}`, 'success', true);
+            this.logPublicationSuccess(postUrl);
             return { success: true, postUrl };
         } catch (err) {
             const errorMsg = err.response?.data || err.message;

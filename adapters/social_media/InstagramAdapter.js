@@ -22,7 +22,7 @@ class InstagramAdapter extends BaseAdapter {
             const instagramPostResult = await postToInstagram({ pageId, accessToken }, { imageUrl, caption });
 
             if (instagramPostResult.success) {
-                this.log(`[SUCCESS] Instagram post created successfully! URL: ${instagramPostResult.postUrl}`, 'success', true);
+                this.logPublicationSuccess(instagramPostResult.postUrl);
                 return { success: true, postUrl: instagramPostResult.postUrl };
             } else {
                 throw new Error(instagramPostResult.error);

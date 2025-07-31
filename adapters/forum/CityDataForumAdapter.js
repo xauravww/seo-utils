@@ -59,8 +59,8 @@ class CityDataForumAdapter extends BaseAdapter {
             const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
             const cloudinaryUrl = cloudinaryUploadResult.secure_url;
             fs.unlinkSync(screenshotPath);
-            this.log(`[SUCCESS] City-Data forum post created: ${finalUrl}`, 'success', true);
-            this.log(`[SCREENSHOT] Screenshot uploaded: ${cloudinaryUrl}`, 'info', true);
+            this.logPublicationSuccess(finalUrl);
+            this.logScreenshotUploaded(cloudinaryUrl);
             return { success: true, postUrl: finalUrl, screenshotUrl: cloudinaryUrl };
         } catch (error) {
             this.log(`[ERROR] CityDataForumAdapter error: ${error.message}`, 'error', true);
@@ -69,7 +69,7 @@ class CityDataForumAdapter extends BaseAdapter {
                 await page.screenshot({ path: errorScreenshotPath, fullPage: true });
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                 fs.unlinkSync(errorScreenshotPath);
-                this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
+                this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
                 throw error;
             }
             throw error;

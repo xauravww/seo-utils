@@ -98,7 +98,7 @@ class BoardsIEForumAdapter extends BaseAdapter {
             const postCloudinaryUploadResult = await cloudinary.uploader.upload(postScreenshotPath);
             postScreenshotUrl = postCloudinaryUploadResult.secure_url;
             fs.unlinkSync(postScreenshotPath);
-            this.log(`[SCREENSHOT] Post screenshot uploaded: ${postScreenshotUrl}`, 'info', true);
+            this.logScreenshotUploaded(postScreenshotUrl);
 
             // Only mark as completed if no error occurred
             return { success: true, postUrl: postedUrl, postScreenshotUrl };
@@ -109,7 +109,7 @@ class BoardsIEForumAdapter extends BaseAdapter {
                 await page.screenshot({ path: errorScreenshotPath, fullPage: true });
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                 fs.unlinkSync(errorScreenshotPath);
-                this.log(`[SCREENSHOT] Error screenshot uploaded: ${errorCloudinaryResult.secure_url}`, 'error', true);
+                this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
                 throw error;
             }
             throw error;

@@ -654,7 +654,7 @@ class GenericBookmarking33Adapter extends BaseAdapter {
                     if (fs.existsSync(screenshotPath)) {
                         const uploadResult = await cloudinary.uploader.upload(screenshotPath);
                         cloudinaryUrl = uploadResult.secure_url;
-                        this.log(`Screenshot uploaded to Cloudinary: ${cloudinaryUrl}`, 'detail', false);
+                        this.logScreenshotUploaded(cloudinaryUrl);
                         await fs.promises.unlink(screenshotPath);
                     }
                     

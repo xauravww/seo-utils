@@ -84,7 +84,7 @@ class PrePostSEOPingAdapter extends BaseAdapter {
             this.log('[EVENT] Screenshot taken after completion.', 'info', true);
             const cloudinaryUploadResult = await cloudinary.uploader.upload(screenshotPath);
             const cloudinaryUrl = cloudinaryUploadResult.secure_url;
-            this.log(`[EVENT] Screenshot uploaded to Cloudinary: ${cloudinaryUrl}`, 'info', true);
+            this.logScreenshotUploaded(cloudinaryUrl);
             fs.unlinkSync(screenshotPath);
 
             return { success: true, pingedUrls: allPingedUrls, screenshotUrl: cloudinaryUrl };
@@ -95,7 +95,7 @@ class PrePostSEOPingAdapter extends BaseAdapter {
                 await page.screenshot({ path: errorScreenshotPath, fullPage: true });
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
                 fs.unlinkSync(errorScreenshotPath);
-                this.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`, 'info', true);
+                this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
             }
             throw error;
         } finally {
