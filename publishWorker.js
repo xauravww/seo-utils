@@ -13,219 +13,219 @@ import { queues, categories, processPublishJob, redisConnectionConfig } from './
 
 // Utility function to map granular categories to parent categories for logging
 const getParentCategory = (granularCategory) => {
-    if (!granularCategory) {
-        return 'uncategorized';
-    }
-    // Normalize to lower case for consistent matching
-    const lowerCaseCategory = granularCategory.toLowerCase();
+  if (!granularCategory) {
+    return 'uncategorized';
+  }
+  // Normalize to lower case for consistent matching
+  const lowerCaseCategory = granularCategory.toLowerCase();
 
-    if (lowerCaseCategory.includes('blog') || lowerCaseCategory.includes('wppostcontroller')) {
-        return 'blog';
-    }
-    if (lowerCaseCategory.includes('article')) {
-        return 'article';
-    }
-    if (lowerCaseCategory.includes('search') || lowerCaseCategory.includes('secretsearchenginelabs') || lowerCaseCategory.includes('activesearchresults')) {
-        return 'search';
-    }
-    if (lowerCaseCategory.includes('ping') || lowerCaseCategory.includes('pingmylinks')) {
-        return 'ping';
-    }
-    if (lowerCaseCategory.includes('classified')) {
-        return 'classified';
-    }
-    if (lowerCaseCategory.includes('forum')) {
-        return 'forum';
-    }
-    if (lowerCaseCategory.includes('bookmarking') || lowerCaseCategory.includes('bookmarkzoo') || lowerCaseCategory.includes('teslabookmarks') || lowerCaseCategory.includes('pearlbookmarking') || lowerCaseCategory.includes('ubookmarking')) {
-        return 'bookmarking';
-    }
-    if (lowerCaseCategory.includes('directory') || lowerCaseCategory.includes('gainweb') || lowerCaseCategory.includes('socialsubmissionengine')) {
-        return 'directory';
-    }
-    if (lowerCaseCategory.includes('social_media') || lowerCaseCategory.includes('redditcontroller') || lowerCaseCategory.includes('twittercontroller') || lowerCaseCategory.includes('facebookcontroller') || lowerCaseCategory.includes('instagramcontroller')) {
-        return 'social_media';
-    }
+  if (lowerCaseCategory.includes('blog') || lowerCaseCategory.includes('wppostcontroller')) {
+    return 'blog';
+  }
+  if (lowerCaseCategory.includes('article')) {
+    return 'article';
+  }
+  if (lowerCaseCategory.includes('search') || lowerCaseCategory.includes('secretsearchenginelabs') || lowerCaseCategory.includes('activesearchresults')) {
+    return 'search';
+  }
+  if (lowerCaseCategory.includes('ping') || lowerCaseCategory.includes('pingmylinks')) {
+    return 'ping';
+  }
+  if (lowerCaseCategory.includes('classified')) {
+    return 'classified';
+  }
+  if (lowerCaseCategory.includes('forum')) {
+    return 'forum';
+  }
+  if (lowerCaseCategory.includes('bookmarking') || lowerCaseCategory.includes('bookmarkzoo') || lowerCaseCategory.includes('teslabookmarks') || lowerCaseCategory.includes('pearlbookmarking') || lowerCaseCategory.includes('ubookmarking')) {
+    return 'bookmarking';
+  }
+  if (lowerCaseCategory.includes('directory') || lowerCaseCategory.includes('gainweb') || lowerCaseCategory.includes('socialsubmissionengine')) {
+    return 'directory';
+  }
+  if (lowerCaseCategory.includes('social_media') || lowerCaseCategory.includes('redditcontroller') || lowerCaseCategory.includes('twittercontroller') || lowerCaseCategory.includes('facebookcontroller') || lowerCaseCategory.includes('instagramcontroller')) {
+    return 'social_media';
+  }
 
-    // Default to 'other' or the original granular category if no specific mapping
-    return 'other'; // Or consider returning granularCategory for unmapped types
+  // Default to 'other' or the original granular category if no specific mapping
+  return 'other'; // Or consider returning granularCategory for unmapped types
 };
 
 const processWebsite = async (jobDetails, job) => {
-    const { requestId, website, content, campaignId } = jobDetails;
-    const { url, category } = website;
-    console.log(`[${requestId}] [Worker] Starting job for ${url}`);
-    console.log(`[DEBUG] [${requestId}] processWebsite called with:`, {
-        url,
-        category,
-        campaignId,
-        hasCredentials: !!website.credentials
+  const { requestId, website, content, campaignId } = jobDetails;
+  const { url, category } = website;
+  console.log(`[${requestId}] [Worker] Starting job for ${url}`);
+  console.log(`[DEBUG] [${requestId}] processWebsite called with:`, {
+    url,
+    category,
+    campaignId,
+    hasCredentials: !!website.credentials
+  });
+
+  publishLog(requestId, `[Worker] Starting job for ${url}`, 'info');
+
+  // 1. Get the correct adapter for the website
+  console.log(`[${requestId}] [Worker] Getting adapter for category: '${category}', url: ${url}`);
+  const adapter = getAdapter({ ...jobDetails, job });
+
+  let adapterLogs = []; // Initialize an array to hold logs from this adapter
+  // 2. If adapter exists, run it
+  if (adapter) {
+    console.log(`[${requestId}] [Worker] Adapter found, executing publish for ${url}.`);
+    console.log(`[DEBUG] [${requestId}] Adapter type:`, adapter.constructor.name);
+
+    const publishResult = await adapter.publish(job); // Pass job to publish()
+    console.log(`[DEBUG] [${requestId}] publishResult:`, {
+      success: publishResult.success,
+      hasPostUrl: !!publishResult.postUrl,
+      hasError: !!publishResult.error
     });
 
-    publishLog(requestId, `[Worker] Starting job for ${url}`, 'info');
+    adapterLogs = adapter.getCollectedLogs(); // Get logs collected by this adapter
+    console.log(`[DEBUG] [${requestId}] adapterLogs from getCollectedLogs():`, {
+      isArray: Array.isArray(adapterLogs),
+      length: adapterLogs ? adapterLogs.length : 'null/undefined',
+      logs: adapterLogs
+    });
 
-    // 1. Get the correct adapter for the website
-    console.log(`[${requestId}] [Worker] Getting adapter for category: '${category}', url: ${url}`);
-    const adapter = getAdapter({ ...jobDetails, job });
-    
-    let adapterLogs = []; // Initialize an array to hold logs from this adapter
-    // 2. If adapter exists, run it
-    if (adapter) {
-        console.log(`[${requestId}] [Worker] Adapter found, executing publish for ${url}.`);
-        console.log(`[DEBUG] [${requestId}] Adapter type:`, adapter.constructor.name);
-        
-        const publishResult = await adapter.publish(job); // Pass job to publish()
-        console.log(`[DEBUG] [${requestId}] publishResult:`, {
-            success: publishResult.success,
-            hasPostUrl: !!publishResult.postUrl,
-            hasError: !!publishResult.error
-        });
-        
-        adapterLogs = adapter.getCollectedLogs(); // Get logs collected by this adapter
-        console.log(`[DEBUG] [${requestId}] adapterLogs from getCollectedLogs():`, {
-            isArray: Array.isArray(adapterLogs),
-            length: adapterLogs ? adapterLogs.length : 'null/undefined',
-            logs: adapterLogs
-        });
-        
-        if (publishResult.success) {
-            console.log(`[${requestId}] [Worker] Adapter publish completed for ${url}.`);
-            if (publishResult.postUrl) {
-                console.log(`[${requestId}] [Worker] Posted URL: ${publishResult.postUrl}`);
-            } else if (publishResult.tweetUrl) {
-                console.log(`[${requestId}] [Worker] Posted URL: ${publishResult.tweetUrl}`);
-            }
-        } else {
-            console.error(`[${requestId}] [Worker] Adapter publish failed for ${url}: ${publishResult.error}`);
-        }
-        
-        // After result is created (success or failure)
-        const result = { ...publishResult, category, adapterLogs };
-        console.log(`[DEBUG] [${requestId}] Final result object:`, {
-            success: result.success,
-            category: result.category,
-            adapterLogsLength: result.adapterLogs ? result.adapterLogs.length : 'null/undefined'
-        });
-        
-        // Always push at least one log to Redis for aggregation
-        if (jobDetails.campaignId) {
-            // Ensure we have meaningful logs
-            let logsToPush = [];
-            if (result.adapterLogs && Array.isArray(result.adapterLogs) && result.adapterLogs.length > 0) {
-                logsToPush = result.adapterLogs;
-            } else {
-                // Create a meaningful default log based on the result
-                const defaultMessage = result.success 
-                    ? `Successfully processed ${jobDetails.website.url}` 
-                    : `Failed to process ${jobDetails.website.url}: ${result.error || 'Unknown error'}`;
-                logsToPush = [{ message: defaultMessage, level: result.success ? 'success' : 'error' }];
-            }
-            
-            console.log(`[DEBUG] [${requestId}] logsToPush:`, {
-                length: logsToPush.length,
-                logs: logsToPush
-            });
-            
-            // Use parent category for better grouping
-            const parentCategory = getParentCategory(result.category);
-            
-            // Merge logs with existing campaign logs
-            await mergeCampaignLogs(jobDetails.campaignId, {
-                userId: jobDetails.userId,
-                website: jobDetails.website.url,
-                category: parentCategory,
-                logs: logsToPush,
-                result: result.success ? 'success' : 'failure'
-            });
-            
-            console.log(`[DEBUG] [${requestId}] Successfully merged logs to Redis campaign_logs:${jobDetails.campaignId}`);
-        }
-        return result;
+    if (publishResult.success) {
+      console.log(`[${requestId}] [Worker] Adapter publish completed for ${url}.`);
+      if (publishResult.postUrl) {
+        console.log(`[${requestId}] [Worker] Posted URL: ${publishResult.postUrl}`);
+      } else if (publishResult.tweetUrl) {
+        console.log(`[${requestId}] [Worker] Posted URL: ${publishResult.tweetUrl}`);
+      }
     } else {
-        const message = `[Worker] No adapter found for category: '${category}' or domain: ${url}`;
-        console.warn(`[${requestId}] ${message}`);
-        publishLog(requestId, message, 'warning');
-        // Push logs to Redis for aggregation, regardless of success
-        if (jobDetails.campaignId) {
-            const parentCategory = getParentCategory(category);
-            await mergeCampaignLogs(jobDetails.campaignId, {
-                userId: jobDetails.userId,
-                website: jobDetails.website.url,
-                category: parentCategory,
-                logs: [{ message, level: 'warning' }],
-                result: 'failure'
-            });
-        }
-        return { success: false, error: message, category, adapterLogs: [{ message, level: 'warning' }] }; // Return failure if no adapter
+      console.error(`[${requestId}] [Worker] Adapter publish failed for ${url}: ${publishResult.error}`);
     }
+
+    // After result is created (success or failure)
+    const result = { ...publishResult, category, adapterLogs };
+    console.log(`[DEBUG] [${requestId}] Final result object:`, {
+      success: result.success,
+      category: result.category,
+      adapterLogsLength: result.adapterLogs ? result.adapterLogs.length : 'null/undefined'
+    });
+
+    // Always push at least one log to Redis for aggregation
+    if (jobDetails.campaignId) {
+      // Ensure we have meaningful logs
+      let logsToPush = [];
+      if (result.adapterLogs && Array.isArray(result.adapterLogs) && result.adapterLogs.length > 0) {
+        logsToPush = result.adapterLogs;
+      } else {
+        // Create a meaningful default log based on the result
+        const defaultMessage = result.success
+          ? `Successfully processed ${jobDetails.website.url}`
+          : `Failed to process ${jobDetails.website.url}: ${result.error || 'Unknown error'}`;
+        logsToPush = [{ message: defaultMessage, level: result.success ? 'success' : 'error' }];
+      }
+
+      console.log(`[DEBUG] [${requestId}] logsToPush:`, {
+        length: logsToPush.length,
+        logs: logsToPush
+      });
+
+      // Use parent category for better grouping
+      const parentCategory = getParentCategory(result.category);
+
+      // Merge logs with existing campaign logs
+      await mergeCampaignLogs(jobDetails.campaignId, {
+        userId: jobDetails.userId,
+        website: jobDetails.website.url,
+        category: parentCategory,
+        logs: logsToPush,
+        result: result.success ? 'success' : 'failure'
+      });
+
+      console.log(`[DEBUG] [${requestId}] Successfully merged logs to Redis campaign_logs:${jobDetails.campaignId}`);
+    }
+    return result;
+  } else {
+    const message = `[Worker] No adapter found for category: '${category}' or domain: ${url}`;
+    console.warn(`[${requestId}] ${message}`);
+    publishLog(requestId, message, 'warning');
+    // Push logs to Redis for aggregation, regardless of success
+    if (jobDetails.campaignId) {
+      const parentCategory = getParentCategory(category);
+      await mergeCampaignLogs(jobDetails.campaignId, {
+        userId: jobDetails.userId,
+        website: jobDetails.website.url,
+        category: parentCategory,
+        logs: [{ message, level: 'warning' }],
+        result: 'failure'
+      });
+    }
+    return { success: false, error: message, category, adapterLogs: [{ message, level: 'warning' }] }; // Return failure if no adapter
+  }
 };
 
 const run = async (workerData) => {
-    const { requestId, websites, content, campaignId, minimumInclude } = workerData;
-    console.log(`[${requestId}] [Worker] Background worker starting. Processing ${websites.length} websites.`);
+  const { requestId, websites, content, campaignId, minimumInclude } = workerData;
+  console.log(`[${requestId}] [Worker] Background worker starting. Processing ${websites.length} websites.`);
 
-    publishLog(requestId, `[Worker] Background worker started. Processing ${websites.length} websites.`, 'info');
+  publishLog(requestId, `[Worker] Background worker started. Processing ${websites.length} websites.`, 'info');
 
-    let allSuccess = true; // Track overall success
-    const results = []; // Array to store results from each adapter
-    const categorizedLogs = {}; // Object to store logs categorized by website category
+  let allSuccess = true; // Track overall success
+  const results = []; // Array to store results from each adapter
+  const categorizedLogs = {}; // Object to store logs categorized by website category
 
-    // --- FIXED LOGIC: Process sites sequentially by score priority until minimumInclude OR all sites tried ---
-    let successCount = 0;
-    let processedCount = 0;
-    const maxTries = websites.length;
-    
-    console.log(`[${requestId}] Processing websites in score order. MinimumInclude: ${minimumInclude || 'not set'}`);
-    
-    // Process websites sequentially (they're already sorted by score in publishController)
-    for (let i = 0; i < websites.length; i++) {
-        const website = websites[i];
-        console.log(`[${requestId}] Processing site ${i + 1}/${websites.length}: ${website.url} (score: ${website.score || 'null'})`);
-        
-        const result = await processWebsite({ requestId, website, content, campaignId }, null);
-        results.push(result);
-        processedCount++;
-        
-        if (result && result.success) {
-            successCount++;
-            console.log(`[${requestId}] Success ${successCount} achieved from ${website.url}`);
-            
-            // STOP immediately if we've reached minimumInclude successful posts
-            if (minimumInclude && successCount >= minimumInclude) {
-                console.log(`[${requestId}] Reached minimumInclude (${minimumInclude}), stopping further processing`);
-                break;
-            }
-        } else {
-            allSuccess = false;
-            console.log(`[${requestId}] Site ${website.url} failed, continuing to next site`);
-        }
-        
-        // Aggregate logs by parent category
-        if (result.category && result.adapterLogs) {
-            const parentCategory = getParentCategory(result.category);
-            if (!categorizedLogs[parentCategory]) {
-                categorizedLogs[parentCategory] = { logs: [], result: '' };
-            }
-            categorizedLogs[parentCategory].logs.push(...result.adapterLogs);
-        }
+  // --- FIXED LOGIC: Process sites sequentially by score priority until minimumInclude OR all sites tried ---
+  let successCount = 0;
+  let processedCount = 0;
+  const maxTries = websites.length;
+
+  console.log(`[${requestId}] Processing websites in score order. MinimumInclude: ${minimumInclude || 'not set'}`);
+
+  // Process websites sequentially (they're already sorted by score in publishController)
+  for (let i = 0; i < websites.length; i++) {
+    const website = websites[i];
+    console.log(`[${requestId}] Processing site ${i + 1}/${websites.length}: ${website.url} (score: ${website.score || 'null'})`);
+
+    const result = await processWebsite({ requestId, website, content, campaignId }, null);
+    results.push(result);
+    processedCount++;
+
+    if (result && result.success) {
+      successCount++;
+      console.log(`[${requestId}] Success ${successCount} achieved from ${website.url}`);
+
+      // STOP immediately if we've reached minimumInclude successful posts
+      if (minimumInclude && successCount >= minimumInclude) {
+        console.log(`[${requestId}] Reached minimumInclude (${minimumInclude}), stopping further processing`);
+        break;
+      }
+    } else {
+      allSuccess = false;
+      console.log(`[${requestId}] Site ${website.url} failed, continuing to next site`);
     }
-    // Add result string to each category - show actual success vs total processed
-    for (const cat in categorizedLogs) {
-        categorizedLogs[cat].result = `${successCount}/${processedCount}`;
-    }
-    // --- END FIXED LOGIC ---
 
-    // Always return 'done' status since campaign is always considered completed
-    const totalProcessed = results.length;
-    const message = minimumInclude 
-        ? `Publications completed: ${successCount}/${minimumInclude} (minimum required) out of ${totalProcessed} sites tried`
-        : `Publications completed: ${successCount}/${totalProcessed} sites processed`;
-    
-    publishLog(requestId, `[Worker] ${message} for request ${requestId}.`, successCount > 0 ? 'success' : 'info');
-    console.log(`[${requestId}] [Worker] ${message}.`);
-    
-    // Always return 'done' status - campaign completion is determined by job completion, not success rate
-    return { status: 'done', results, categorizedLogs, successCount, totalProcessed };
+    // Aggregate logs by parent category
+    if (result.category && result.adapterLogs) {
+      const parentCategory = getParentCategory(result.category);
+      if (!categorizedLogs[parentCategory]) {
+        categorizedLogs[parentCategory] = { logs: [], result: '' };
+      }
+      categorizedLogs[parentCategory].logs.push(...result.adapterLogs);
+    }
+  }
+  // Add result string to each category - show actual success vs total processed
+  for (const cat in categorizedLogs) {
+    categorizedLogs[cat].result = `${successCount}/${processedCount}`;
+  }
+  // --- END FIXED LOGIC ---
+
+  // Always return 'done' status since campaign is always considered completed
+  const totalProcessed = results.length;
+  const message = minimumInclude
+    ? `Publications completed: ${successCount}/${minimumInclude} (minimum required) out of ${totalProcessed} sites tried`
+    : `Publications completed: ${successCount}/${totalProcessed} sites processed`;
+
+  publishLog(requestId, `[Worker] ${message} for request ${requestId}.`, successCount > 0 ? 'success' : 'info');
+  console.log(`[${requestId}] [Worker] ${message}.`);
+
+  // Always return 'done' status - campaign completion is determined by job completion, not success rate
+  return { status: 'done', results, categorizedLogs, successCount, totalProcessed };
 };
 console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
 
@@ -255,12 +255,12 @@ redisPublisher.on('error', (err) => {
 // Function to merge campaign logs atomically
 const mergeCampaignLogs = async (campaignId, newLogData) => {
   const key = `campaign_logs:${campaignId}`;
-  
+
   try {
     // Get existing logs
     const existingData = await connection.get(key);
     let mergedLogs = {};
-    
+
     if (existingData) {
       try {
         mergedLogs = JSON.parse(existingData);
@@ -269,24 +269,34 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
         mergedLogs = {};
       }
     }
-    
+
     // Initialize structure if needed
     if (!mergedLogs.userId) mergedLogs.userId = newLogData.userId;
     if (!mergedLogs.logs) mergedLogs.logs = {};
     if (!mergedLogs.logs[newLogData.category]) {
       mergedLogs.logs[newLogData.category] = { logs: [] };
     }
-    
+
     // Add new logs to existing category logs
     mergedLogs.logs[newLogData.category].logs.push(...newLogData.logs);
-    
-    // Note: result field will be calculated and added in index.js during final aggregation
-    // This ensures accurate success/total counts across all jobs
-    
+
+    // Initialize counters if not present
+    if (!mergedLogs.successCount) mergedLogs.successCount = 0;
+    if (!mergedLogs.totalCount) mergedLogs.totalCount = 0;
+
+    // Update counters based on job result
+    mergedLogs.totalCount++;
+    if (newLogData.result === 'success') {
+      mergedLogs.successCount++;
+    }
+
+    // Update result field for this category
+    mergedLogs.logs[newLogData.category].result = `${mergedLogs.successCount}/${mergedLogs.totalCount}`;
+
     // Store merged logs back to Redis
     await connection.set(key, JSON.stringify(mergedLogs));
-    
-    console.log(`[mergeCampaignLogs] Successfully merged logs for campaign ${campaignId}, category ${newLogData.category}`);
+
+    console.log(`[mergeCampaignLogs] Successfully merged logs for campaign ${campaignId}, category ${newLogData.category}. Result: ${mergedLogs.successCount}/${mergedLogs.totalCount}`);
   } catch (error) {
     console.error(`[mergeCampaignLogs] Error merging logs for campaign ${campaignId}:`, error);
     // Fallback: store as individual entry if merge fails
@@ -326,21 +336,27 @@ const startAllCategoryWorkers = () => {
           const { website, content, campaignId, userId, minimumInclude, requestId: reqId } = job.data;
           requestId = reqId;
           await job.log(`[BullMQ] [${category}] Starting job ${job.id} (requestId: ${requestId})`);
-          
+
           try {
             // Process the website
             const result = await processWebsite({ requestId, website, content, campaignId, userId }, job);
-            
-            // Always return a result, even for failures
-            return {
-              status: result.success ? 'done' : 'error',
-              ...result
-            };
+
+            // Return success or throw error for BullMQ to handle correctly
+            if (result.success) {
+              return {
+                status: 'done',
+                ...result
+              };
+            } else {
+              // Throw error so BullMQ marks job as "failed"
+              // Note: Logs are already updated in processWebsite function
+              throw new Error(result.error || 'Publication failed');
+            }
           } catch (error) {
             // Handle unexpected errors - still push logs to Redis
             console.error(`[BullMQ] [${category}] Unexpected error in job ${job.id}:`, error);
             await job.log(`[ERROR] Unexpected error: ${error.message}`);
-            
+
             // Push error log to Redis for campaign tracking
             if (campaignId) {
               const parentCategory = getParentCategory(website.category);
@@ -348,21 +364,16 @@ const startAllCategoryWorkers = () => {
                 userId: userId,
                 website: website.url,
                 category: parentCategory,
-                logs: [{ 
-                  message: `[SYSTEM ERROR] Unexpected error processing ${website.url}: ${error.message}`, 
-                  level: 'error' 
+                logs: [{
+                  message: `[SYSTEM ERROR] Unexpected error processing ${website.url}: ${error.message}`,
+                  level: 'error'
                 }],
                 result: 'failure'
               });
             }
-            
-            // Return error status but don't throw - let BullMQ handle it
-            return {
-              status: 'error',
-              success: false,
-              error: error.message,
-              category: website.category
-            };
+
+            // Re-throw the error so BullMQ marks job as "failed"
+            throw error;
           }
         }
         // Call processWebsite with job instance
@@ -376,5 +387,5 @@ const startAllCategoryWorkers = () => {
 
 if (process.env.BULLMQ_WORKER === '1' || require.main === module) {
   startAllCategoryWorkers();
-  setInterval(() => {}, 1 << 30);
+  setInterval(() => { }, 1 << 30);
 } 

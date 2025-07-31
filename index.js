@@ -117,9 +117,9 @@ for (const cat of categories) {
     const requestId = jobData?.requestId;
     const campaign_id = jobData?.campaignId;
     const user_id = jobData?.userId;
-    
+
     console.log(`[${requestId}] [${cat}] Job ${jobId} completed for campaign ${campaign_id}`);
-    
+
     // Remove jobId from campaign set
     if (campaign_id) {
       await redis.srem(`campaign_jobs:${campaign_id}`, jobId);
@@ -136,7 +136,7 @@ for (const cat of categories) {
         console.log(`[${requestId}] Starting log aggregation for campaign ${campaign_id}`);
         const campaignLogsData = await redis.get(`campaign_logs:${campaign_id}`);
         let aggregatedLogs = {};
-        
+
         if (campaignLogsData) {
           try {
             const parsedData = JSON.parse(campaignLogsData);
@@ -189,7 +189,7 @@ for (const cat of categories) {
                 updatePayload.logs[category] = JSON.stringify(categoryData);
               }
             }
-            const authToken = process.env.UTIL_TOKEN ; // REPLACE WITH ACTUAL TOKEN RETRIEVAL
+            const authToken = process.env.UTIL_TOKEN; // REPLACE WITH ACTUAL TOKEN RETRIEVAL
             const apiResponse = await axios.put(apiUpdateUrl, updatePayload, {
               headers: {
                 'accept': 'application/json',
@@ -224,7 +224,97 @@ for (const cat of categories) {
   });
 
   queueEvents.on('failed', async ({ jobId, failedReason }) => {
-    const requestId = await getRequestIdForJob(jobId);
+    console.log(`[DEBUG] [${cat}] Job ${jobId} failed event triggered with reason:`, failedReason);
+    const jobData = await getJobData(jobId);
+    const requestId = jobData?.requestId;
+    const campaign_id = jobData?.campaignId;
+    const user_id = jobData?.userId;
+
+    console.log(`[${requestId}] [${cat}] Job ${jobId} failed for campaign ${campaign_id}`);
+
+    // Remove jobId from campaign set
+    if (campaign_id) {
+      await redis.srem(`campaign_jobs:${campaign_id}`, jobId);
+      // Note: Don't increment success count for failed jobs
+      const remaining = await redis.scard(`campaign_jobs:${campaign_id}`);
+      console.log(`[${requestId}] Campaign ${campaign_id}: ${remaining} jobs remaining`);
+
+      if (remaining === 0) {
+        // All jobs for this campaign are done, get aggregated logs
+        console.log(`[${requestId}] Starting log aggregation for campaign ${campaign_id}`);
+        const campaignLogsData = await redis.get(`campaign_logs:${campaign_id}`);
+        let aggregatedLogs = {};
+
+        if (campaignLogsData) {
+          try {
+            const parsedData = JSON.parse(campaignLogsData);
+            // The logs are already aggregated in our new format
+            aggregatedLogs = parsedData.logs || {};
+            console.log(`[${requestId}] Found ${Object.keys(aggregatedLogs).length} log categories for campaign ${campaign_id}`);
+          } catch (parseError) {
+            console.error(`[${requestId}] Error parsing campaign logs for ${campaign_id}:`, parseError);
+          }
+        } else {
+          console.log(`[${requestId}] No campaign logs found for ${campaign_id}`);
+        }
+
+        // Compose result string
+        const totalCount = parseInt(await redis.get(`campaign_total:${campaign_id}`) || '0', 10);
+        const successCount = parseInt(await redis.get(`campaign_success:${campaign_id}`) || '0', 10);
+        const resultString = `${successCount}/${totalCount}`;
+        const finalStatus = successCount > 0 ? 'completed' : 'failed'; // Failed only if ALL jobs failed
+        console.log(`[${requestId}] Campaign ${campaign_id} final stats: ${resultString}, status: ${finalStatus}`);
+
+        if (campaign_id && user_id) {
+          try {
+            const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
+            const updatePayload = {
+              user_id: user_id,
+              logs: {},
+              status: finalStatus,
+              result: resultString,
+            };
+            for (const category in aggregatedLogs) {
+              if (aggregatedLogs.hasOwnProperty(category)) {
+                // Add result field as sibling to category logs
+                const categoryData = {
+                  ...aggregatedLogs[category],
+                  result: resultString // Add result as sibling field
+                };
+                updatePayload.logs[category] = JSON.stringify(categoryData);
+              }
+            }
+            const authToken = process.env.UTIL_TOKEN;
+            const apiResponse = await axios.put(apiUpdateUrl, updatePayload, {
+              headers: {
+                'accept': 'application/json',
+                'x-util-secret': authToken,
+                'Content-Type': 'application/json',
+              }
+            });
+            websocketLogger.log(requestId, `✅ Campaign ${campaign_id} updated with categorized logs. API Response Status: ${apiResponse.status}, Result: ${resultString}`);
+            console.log(`[${requestId}] Campaign ${campaign_id} updated successfully.`, apiResponse.data);
+          } catch (apiError) {
+            websocketLogger.log(requestId, `❌ Failed to update campaign ${campaign_id} with logs: ${apiError.message}`, 'error');
+            console.error(`[${requestId}] Error updating campaign ${campaign_id}:`, apiError.message);
+            if (apiError.response) {
+              console.error(`[${requestId}] API Error Details:`, apiError.response.data);
+            }
+          }
+        } else {
+          websocketLogger.log(requestId, `[Worker Update] Skipping campaign update: missing campaignId or userId.`, 'warning');
+          console.log(`[${requestId}] Skipping campaign update. Missing campaignId or userId.`);
+        }
+
+        // Clean up Redis keys
+        console.log(`[${requestId}] Cleaned up Redis keys for campaign ${campaign_id}`);
+        await redis.del(`campaign_jobs:${campaign_id}`);
+        await redis.del(`campaign_total:${campaign_id}`);
+        await redis.del(`campaign_success:${campaign_id}`);
+        await redis.del(`campaign_logs:${campaign_id}`);
+      }
+    }
+
     if (requestId) {
       websocketLogger.log(requestId, `[BullMQ] Job ${jobId} failed: ${failedReason}`, 'error');
     }
@@ -242,17 +332,17 @@ for (const cat of categories) {
 app.use(express.static('public'));
 
 app.use((req, res, next) => {
-    const start = process.hrtime();
-    const originalJson = res.json;
+  const start = process.hrtime();
+  const originalJson = res.json;
 
-    res.json = (data) => {
-        const diff = process.hrtime(start);
-        const duration = (diff[0] + diff[1] / 1e9).toFixed(3);
-        data.responseTime_seconds = parseFloat(duration);
-        originalJson.call(res, data);
-    };
+  res.json = (data) => {
+    const diff = process.hrtime(start);
+    const duration = (diff[0] + diff[1] / 1e9).toFixed(3);
+    data.responseTime_seconds = parseFloat(duration);
+    originalJson.call(res, data);
+  };
 
-    next();
+  next();
 });
 
 app.use(express.json());
@@ -385,15 +475,15 @@ app.get('/admin/queues/worker-health', async (req, res) => {
               </table>
               <table>
                 <tr><th>System</th><th>Value</th></tr>
-                <tr><td>Total RAM</td><td>${(totalMem/1024/1024/1024).toFixed(2)} GB</td></tr>
-                <tr><td>Free RAM</td><td>${(freeMem/1024/1024/1024).toFixed(2)} GB</td></tr>
-                <tr><td>Used RAM</td><td>${(usedMem/1024/1024/1024).toFixed(2)} GB</td></tr>
-                <tr><td>CPU Load (1/5/15m)</td><td>${loadAvg.map(x=>x.toFixed(2)).join(' / ')}</td></tr>
-                <tr><td>Uptime</td><td>${(uptime/60/60).toFixed(2)} hours</td></tr>
+                <tr><td>Total RAM</td><td>${(totalMem / 1024 / 1024 / 1024).toFixed(2)} GB</td></tr>
+                <tr><td>Free RAM</td><td>${(freeMem / 1024 / 1024 / 1024).toFixed(2)} GB</td></tr>
+                <tr><td>Used RAM</td><td>${(usedMem / 1024 / 1024 / 1024).toFixed(2)} GB</td></tr>
+                <tr><td>CPU Load (1/5/15m)</td><td>${loadAvg.map(x => x.toFixed(2)).join(' / ')}</td></tr>
+                <tr><td>Uptime</td><td>${(uptime / 60 / 60).toFixed(2)} hours</td></tr>
               </table>
               <table>
                 <tr><th>Disk</th><th>Free</th><th>Total</th></tr>
-                ${(diskStats||[]).map(d => `<tr><td>${d.drive||d.mount}</td><td>${(d.free/1024/1024/1024).toFixed(2)} GB</td><td>${(d.size/1024/1024/1024).toFixed(2)} GB</td></tr>`).join('')}
+                ${(diskStats || []).map(d => `<tr><td>${d.drive || d.mount}</td><td>${(d.free / 1024 / 1024 / 1024).toFixed(2)} GB</td><td>${(d.size / 1024 / 1024 / 1024).toFixed(2)} GB</td></tr>`).join('')}
               </table>
               <p style="color:#888;">Auto-refreshes every 5 seconds.</p>
             </body>
