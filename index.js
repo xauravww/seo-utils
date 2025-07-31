@@ -168,7 +168,7 @@ for (const cat of categories) {
         const totalCount = parseInt(await redis.get(`campaign_total:${campaign_id}`) || '0', 10);
         const successCount = parseInt(await redis.get(`campaign_success:${campaign_id}`) || '0', 10);
         const resultString = `${successCount}/${totalCount}`;
-        const finalStatus = successCount > 0 ? 'completed' : 'failed';
+        const finalStatus = successCount > 0 ? 'completed' : 'failed'; // Failed only if ALL jobs failed
         console.log(`[${requestId}] Campaign ${campaign_id} final stats: ${resultString}, status: ${finalStatus}`);
         if (campaign_id && user_id) {
           try {
@@ -181,7 +181,12 @@ for (const cat of categories) {
             };
             for (const category in aggregatedLogs) {
               if (aggregatedLogs.hasOwnProperty(category)) {
-                updatePayload.logs[category] = JSON.stringify(aggregatedLogs[category]);
+                // Add result field as sibling to category logs
+                const categoryData = {
+                  ...aggregatedLogs[category],
+                  result: resultString // Add result as sibling field
+                };
+                updatePayload.logs[category] = JSON.stringify(categoryData);
               }
             }
             const authToken = process.env.UTIL_TOKEN ; // REPLACE WITH ACTUAL TOKEN RETRIEVAL

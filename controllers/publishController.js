@@ -153,10 +153,16 @@ async function processPublishJob(reqBody, requestId) {
     console.error(`[${requestId}] ${errorMessage}`);
     return { error: errorMessage };
   }
-  for (let i = eligibleWebsites.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [eligibleWebsites[i], eligibleWebsites[j]] = [eligibleWebsites[j], eligibleWebsites[i]];
-  }
+  // Sort websites by score (highest first) for priority-based selection
+  eligibleWebsites.sort((a, b) => {
+    const scoreA = a.score !== null && a.score !== undefined ? parseFloat(a.score) : -1;
+    const scoreB = b.score !== null && b.score !== undefined ? parseFloat(b.score) : -1;
+    return scoreB - scoreA; // Descending order (highest score first)
+  });
+  
+  console.log(`[${requestId}] Websites sorted by score (highest first):`, 
+    eligibleWebsites.map(site => ({ url: site.url, score: site.score })));
+  
   websites = eligibleWebsites;
   console.log(`[${requestId}] Final eligible websites to process: ${websites.length}`);
   user_id = info ? info.user_id : (credential ? credential.user_id : null);

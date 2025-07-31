@@ -170,26 +170,37 @@ const run = async (workerData) => {
     const results = []; // Array to store results from each adapter
     const categorizedLogs = {}; // Object to store logs categorized by website category
 
-    // --- NEW LOGIC: Only count successful publications, skip failed, and continue until minimumInclude is satisfied ---
+    // --- FIXED LOGIC: Process sites sequentially by score priority until minimumInclude OR all sites tried ---
     let successCount = 0;
-    let triedIndexes = new Set();
-    let i = 0;
+    let processedCount = 0;
     const maxTries = websites.length;
-    const requiredCount = minimumInclude || maxTries;
-    while (successCount < requiredCount && triedIndexes.size < maxTries) {
-        // Find the next untried website
-        while (i < websites.length && triedIndexes.has(i)) i++;
-        if (i >= websites.length) break;
-        triedIndexes.add(i);
+    
+    console.log(`[${requestId}] Processing websites in score order. MinimumInclude: ${minimumInclude || 'not set'}`);
+    
+    // Process websites sequentially (they're already sorted by score in publishController)
+    for (let i = 0; i < websites.length; i++) {
         const website = websites[i];
-        const result = await processWebsite({ requestId, website, content, campaignId }, null); // Pass null for job instance
+        console.log(`[${requestId}] Processing site ${i + 1}/${websites.length}: ${website.url} (score: ${website.score || 'null'})`);
+        
+        const result = await processWebsite({ requestId, website, content, campaignId }, null);
         results.push(result);
+        processedCount++;
+        
         if (result && result.success) {
             successCount++;
+            console.log(`[${requestId}] Success ${successCount} achieved from ${website.url}`);
+            
+            // STOP immediately if we've reached minimumInclude successful posts
+            if (minimumInclude && successCount >= minimumInclude) {
+                console.log(`[${requestId}] Reached minimumInclude (${minimumInclude}), stopping further processing`);
+                break;
+            }
         } else {
             allSuccess = false;
+            console.log(`[${requestId}] Site ${website.url} failed, continuing to next site`);
         }
-        // Aggregate logs by parent category, and also track result count
+        
+        // Aggregate logs by parent category
         if (result.category && result.adapterLogs) {
             const parentCategory = getParentCategory(result.category);
             if (!categorizedLogs[parentCategory]) {
@@ -197,25 +208,24 @@ const run = async (workerData) => {
             }
             categorizedLogs[parentCategory].logs.push(...result.adapterLogs);
         }
-        i = 0; // Always start from the beginning to find the next untried
     }
-    // Add result string to each category
+    // Add result string to each category - show actual success vs total processed
     for (const cat in categorizedLogs) {
-        categorizedLogs[cat].result = `${successCount}/${requiredCount}`;
+        categorizedLogs[cat].result = `${successCount}/${processedCount}`;
     }
-    // --- END NEW LOGIC ---
+    // --- END FIXED LOGIC ---
 
-    if (successCount > 0) {
-        publishLog(requestId, `[Worker] Publications completed: ${successCount}/${requiredCount} for request ${requestId}.`, 'success');
-        console.log(`[${requestId}] [Worker] Publications completed: ${successCount}/${requiredCount}.`);
-        // Remove parentPort.postMessage and always return the result object for BullMQ
-        return { status: 'done', results, categorizedLogs };
-    } else {
-        publishLog(requestId, `[Worker] No successful publications for request ${requestId}.`, 'error');
-        console.error(`[${requestId}] [Worker] No successful publications.`);
-        // Remove parentPort.postMessage and always return the error object for BullMQ
-        return { status: 'error', message: 'No successful publication jobs.', categorizedLogs };
-    }
+    // Always return 'done' status since campaign is always considered completed
+    const totalProcessed = results.length;
+    const message = minimumInclude 
+        ? `Publications completed: ${successCount}/${minimumInclude} (minimum required) out of ${totalProcessed} sites tried`
+        : `Publications completed: ${successCount}/${totalProcessed} sites processed`;
+    
+    publishLog(requestId, `[Worker] ${message} for request ${requestId}.`, successCount > 0 ? 'success' : 'info');
+    console.log(`[${requestId}] [Worker] ${message}.`);
+    
+    // Always return 'done' status - campaign completion is determined by job completion, not success rate
+    return { status: 'done', results, categorizedLogs, successCount, totalProcessed };
 };
 console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
 
@@ -264,18 +274,14 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
     if (!mergedLogs.userId) mergedLogs.userId = newLogData.userId;
     if (!mergedLogs.logs) mergedLogs.logs = {};
     if (!mergedLogs.logs[newLogData.category]) {
-      mergedLogs.logs[newLogData.category] = { logs: [], result: 'pending' };
+      mergedLogs.logs[newLogData.category] = { logs: [] };
     }
     
     // Add new logs to existing category logs
     mergedLogs.logs[newLogData.category].logs.push(...newLogData.logs);
     
-    // Update result status (keep 'failure' if any job failed, otherwise 'success')
-    if (newLogData.result === 'failure') {
-      mergedLogs.logs[newLogData.category].result = 'failure';
-    } else if (mergedLogs.logs[newLogData.category].result !== 'failure') {
-      mergedLogs.logs[newLogData.category].result = 'success';
-    }
+    // Note: result field will be calculated and added in index.js during final aggregation
+    // This ensures accurate success/total counts across all jobs
     
     // Store merged logs back to Redis
     await connection.set(key, JSON.stringify(mergedLogs));
