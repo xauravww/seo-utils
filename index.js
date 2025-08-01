@@ -119,6 +119,39 @@ for (const cat of categories) {
     const user_id = jobData?.userId;
 
     console.log(`[${requestId}] [${cat}] Job ${jobId} completed for campaign ${campaign_id}`);
+    
+    // REDIS FLAG CHECK: Check if publishWorker.js already updated database
+    console.log(`[${requestId}] 🔍 COMPLETED HANDLER DEBUG: Starting Redis flag check for campaign ${campaign_id}`);
+    console.log(`[${requestId}] 📊 COMPLETED HANDLER DEBUG: Job details - ID: ${jobId}, Category: ${cat}, Return value: ${JSON.stringify(returnvalue)}`);
+    
+    if (campaign_id) {
+      try {
+        console.log(`[${requestId}] 🚩 CHECKING Redis flag: campaign_db_updated:${campaign_id}`);
+        const dbUpdatedFlag = await redis.get(`campaign_db_updated:${campaign_id}`);
+        console.log(`[${requestId}] 🚩 FLAG RESULT: ${dbUpdatedFlag} (type: ${typeof dbUpdatedFlag})`);
+        
+        if (dbUpdatedFlag === 'true') {
+          console.log(`[${requestId}] 🛡️ WORKER PROTECTION ACTIVATED: Database already updated by publishWorker.js for campaign ${campaign_id}`);
+          console.log(`[${requestId}] 🚫 COMPLETED HANDLER EXITING IMMEDIATELY to prevent database override`);
+          console.log(`[${requestId}] 🧹 Cleaning up Redis flag: campaign_db_updated:${campaign_id}`);
+          
+          // Clean up the flag and exit
+          await redis.del(`campaign_db_updated:${campaign_id}`);
+          console.log(`[${requestId}] ✅ Flag cleaned up successfully`);
+          
+          websocketLogger.log(requestId, `✅ WORKER PROTECTION: Campaign ${campaign_id} database already updated by worker. Completed handler skipped.`, 'info');
+          return; // Exit immediately
+        } else {
+          console.log(`[${requestId}] 📝 NO FLAG FOUND: Completed handler will continue with normal processing`);
+          console.log(`[${requestId}] 🔄 This indicates either: 1) Normal campaign, or 2) Worker hasn't set flag yet`);
+        }
+      } catch (flagCheckError) {
+        console.error(`[${requestId}] ❌ FLAG CHECK ERROR: ${flagCheckError.message}`);
+        console.error(`[${requestId}] 🔄 Continuing with normal processing despite flag check error`);
+      }
+    } else {
+      console.log(`[${requestId}] ⚠️ NO CAMPAIGN ID: Skipping flag check (campaign_id is ${campaign_id})`);
+    }
 
     // Remove jobId from campaign set
     if (campaign_id) {
@@ -132,6 +165,35 @@ for (const cat of categories) {
       const remaining = await redis.scard(`campaign_jobs:${campaign_id}`);
       console.log(`[${requestId}] Campaign ${campaign_id}: ${remaining} jobs remaining`);
       if (remaining === 0) {
+        // AGGRESSIVE RETRY DETECTION: Check database first before any processing
+        console.log(`[${requestId}] AGGRESSIVE RETRY CHECK: Checking database before processing campaign ${campaign_id}`);
+        
+        try {
+          const authToken = process.env.UTIL_TOKEN;
+          const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
+          const quickCheckResponse = await axios.get(`${apiUpdateUrl}`, {
+            headers: {
+              'accept': 'application/json',
+              'x-util-secret': authToken,
+            }
+          });
+          
+          if (quickCheckResponse.data && quickCheckResponse.data.logs && Object.keys(quickCheckResponse.data.logs).length > 0) {
+            console.log(`[${requestId}] AGGRESSIVE RETRY DETECTION: Campaign ${campaign_id} already has logs in database. SKIPPING all processing to prevent override.`);
+            
+            // Clean up Redis keys and exit immediately
+            await redis.del(`campaign_jobs:${campaign_id}`);
+            await redis.del(`campaign_total:${campaign_id}`);
+            await redis.del(`campaign_success:${campaign_id}`);
+            await redis.del(`campaign_logs:${campaign_id}`);
+            
+            websocketLogger.log(requestId, `✅ RETRY PREVENTED: Campaign ${campaign_id} already has logs. Skipped processing to prevent override.`, 'info');
+            return; // Exit immediately
+          }
+        } catch (quickCheckError) {
+          console.log(`[${requestId}] Quick retry check failed: ${quickCheckError.message}`);
+        }
+        
         // All jobs for this campaign are done, get aggregated logs
         console.log(`[${requestId}] Starting log aggregation for campaign ${campaign_id}`);
         const campaignLogsData = await redis.get(`campaign_logs:${campaign_id}`);
@@ -170,26 +232,156 @@ for (const cat of categories) {
         const resultString = `${successCount}/${totalCount}`;
         const finalStatus = successCount > 0 ? 'completed' : 'failed'; // Failed only if ALL jobs failed
         console.log(`[${requestId}] Campaign ${campaign_id} final stats: ${resultString}, status: ${finalStatus}`);
+        console.log(`[${requestId}] QUEUE EVENT DEBUG: Job completed, checking if should update database`);
+        console.log(`[${requestId}] QUEUE EVENT DEBUG: Total jobs for campaign: ${totalCount}, Success: ${successCount}`);
+        
+        // Enhanced retry detection - check if logs already contain retry markers
+        let isRetryScenario = false;
+        let existingCampaignStatus = null;
+        
+        // First check: Look for retry markers in the Redis logs themselves
+        if (campaignLogsData) {
+          try {
+            const parsedData = JSON.parse(campaignLogsData);
+            if (parsedData.attempts || parsedData.results) {
+              // Check if any website has multiple attempts (indicating retries)
+              const hasRetries = Object.values(parsedData.attempts || {}).some(attempts => 
+                Array.isArray(attempts) && attempts.length > 1
+              );
+              
+              if (hasRetries) {
+                isRetryScenario = true;
+                console.log(`[${requestId}] RETRY DETECTED: Found multiple attempts in Redis logs for campaign ${campaign_id}`);
+              }
+            }
+          } catch (parseError) {
+            console.log(`[${requestId}] Could not parse Redis logs for retry detection: ${parseError.message}`);
+          }
+        }
+        
+        // Second check: Compare with database status if first check didn't detect retry
+        if (!isRetryScenario && campaign_id && user_id) {
+          try {
+            const authToken = process.env.UTIL_TOKEN;
+            const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
+            const existingCampaignResponse = await axios.get(`${apiUpdateUrl}`, {
+              headers: {
+                'accept': 'application/json',
+                'x-util-secret': authToken,
+              }
+            });
+            
+            if (existingCampaignResponse.data) {
+              existingCampaignStatus = existingCampaignResponse.data.status;
+              
+              // If campaign was already completed/failed, this is likely a retry
+              if (existingCampaignStatus === 'completed' || existingCampaignStatus === 'failed') {
+                isRetryScenario = true;
+                console.log(`[${requestId}] RETRY DETECTED: Campaign ${campaign_id} was already ${existingCampaignStatus}, processing ${totalCount} job(s). This appears to be a retry.`);
+              }
+            }
+          } catch (fetchError) {
+            console.log(`[${requestId}] Could not fetch existing campaign status: ${fetchError.message}`);
+          }
+        }
+        
+        // HYBRID APPROACH: If this is a retry scenario, publishWorker.js already updated database
+        if (isRetryScenario) {
+          console.log(`[${requestId}] 🛡️ RETRY SCENARIO: Database already updated by publishWorker.js to prevent override`);
+          console.log(`[${requestId}] 🔄 Queue handler skipping database update for retry protection`);
+          
+          // Clean up Redis keys and exit early
+          console.log(`[${requestId}] Cleaning up Redis keys for retry scenario campaign ${campaign_id}`);
+          await redis.del(`campaign_jobs:${campaign_id}`);
+          await redis.del(`campaign_total:${campaign_id}`);
+          await redis.del(`campaign_success:${campaign_id}`);
+          await redis.del(`campaign_logs:${campaign_id}`);
+          
+          websocketLogger.log(requestId, `✅ Retry completed for campaign ${campaign_id}. Database updated by worker with proper log merging.`, 'info');
+          return; // Exit early, don't update database
+        }
+        
+        console.log(`[${requestId}] 📝 NORMAL SCENARIO: Queue handler will update database as usual`);
+        
         if (campaign_id && user_id) {
           try {
             const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
+            
+            // First, fetch existing campaign data to merge logs instead of overriding
+            let existingLogs = {};
+            try {
+              const authToken = process.env.UTIL_TOKEN;
+              const existingCampaignResponse = await axios.get(`${apiUpdateUrl}`, {
+                headers: {
+                  'accept': 'application/json',
+                  'x-util-secret': authToken,
+                }
+              });
+              
+              if (existingCampaignResponse.data && existingCampaignResponse.data.logs) {
+                existingLogs = existingCampaignResponse.data.logs;
+                console.log(`[${requestId}] Found existing logs for campaign ${campaign_id}, merging with new logs`);
+              }
+            } catch (fetchError) {
+              console.log(`[${requestId}] Could not fetch existing campaign logs (${fetchError.message}), proceeding with new logs only`);
+            }
+
+            // Merge existing logs with new logs (preserve existing, append new)
+            const mergedLogs = { ...existingLogs };
+            
+            for (const category in aggregatedLogs) {
+              if (aggregatedLogs.hasOwnProperty(category)) {
+                const newCategoryData = {
+                  ...aggregatedLogs[category],
+                  result: resultString,
+                  timestamp: new Date().toISOString(),
+                  isRetry: !!existingLogs[category] // Mark as retry if category already exists
+                };
+
+                if (existingLogs[category]) {
+                  // Category exists - merge logs instead of overriding
+                  try {
+                    const existingCategoryData = typeof existingLogs[category] === 'string' 
+                      ? JSON.parse(existingLogs[category]) 
+                      : existingLogs[category];
+                    
+                    const mergedCategoryData = {
+                      logs: [
+                        ...(existingCategoryData.logs || []),
+                        ...newCategoryData.logs
+                      ],
+                      result: newCategoryData.result, // Update with latest result
+                      lastUpdated: new Date().toISOString(),
+                      totalAttempts: (existingCategoryData.totalAttempts || 1) + 1,
+                      isRetry: true
+                    };
+                    
+                    mergedLogs[category] = JSON.stringify(mergedCategoryData);
+                    console.log(`[${requestId}] MERGED logs for category ${category} (attempt #${mergedCategoryData.totalAttempts})`);
+                  } catch (parseError) {
+                    console.log(`[${requestId}] Could not parse existing logs for ${category}, using new logs only`);
+                    mergedLogs[category] = JSON.stringify(newCategoryData);
+                  }
+                } else {
+                  // New category - add as is
+                  mergedLogs[category] = JSON.stringify({
+                    ...newCategoryData,
+                    totalAttempts: 1,
+                    isRetry: false
+                  });
+                  console.log(`[${requestId}] ADDED new category ${category}`);
+                }
+              }
+            }
+
             const updatePayload = {
               user_id: user_id,
-              logs: {},
+              logs: mergedLogs, // Use merged logs instead of empty object
               status: finalStatus,
               result: resultString,
             };
-            for (const category in aggregatedLogs) {
-              if (aggregatedLogs.hasOwnProperty(category)) {
-                // Add result field as sibling to category logs
-                const categoryData = {
-                  ...aggregatedLogs[category],
-                  result: resultString // Add result as sibling field
-                };
-                updatePayload.logs[category] = JSON.stringify(categoryData);
-              }
-            }
-            const authToken = process.env.UTIL_TOKEN; // REPLACE WITH ACTUAL TOKEN RETRIEVAL
+
+            const authToken = process.env.UTIL_TOKEN;
             const apiResponse = await axios.put(apiUpdateUrl, updatePayload, {
               headers: {
                 'accept': 'application/json',
@@ -231,6 +423,39 @@ for (const cat of categories) {
     const user_id = jobData?.userId;
 
     console.log(`[${requestId}] [${cat}] Job ${jobId} failed for campaign ${campaign_id}`);
+    
+    // REDIS FLAG CHECK: Check if publishWorker.js already updated database
+    console.log(`[${requestId}] 🔍 FAILED HANDLER DEBUG: Starting Redis flag check for campaign ${campaign_id}`);
+    console.log(`[${requestId}] 📊 FAILED HANDLER DEBUG: Job details - ID: ${jobId}, Category: ${cat}, Failed reason: ${failedReason}`);
+    
+    if (campaign_id) {
+      try {
+        console.log(`[${requestId}] 🚩 CHECKING Redis flag: campaign_db_updated:${campaign_id}`);
+        const dbUpdatedFlag = await redis.get(`campaign_db_updated:${campaign_id}`);
+        console.log(`[${requestId}] 🚩 FLAG RESULT: ${dbUpdatedFlag} (type: ${typeof dbUpdatedFlag})`);
+        
+        if (dbUpdatedFlag === 'true') {
+          console.log(`[${requestId}] 🛡️ WORKER PROTECTION ACTIVATED: Database already updated by publishWorker.js for campaign ${campaign_id}`);
+          console.log(`[${requestId}] 🚫 FAILED HANDLER EXITING IMMEDIATELY to prevent database override`);
+          console.log(`[${requestId}] 🧹 Cleaning up Redis flag: campaign_db_updated:${campaign_id}`);
+          
+          // Clean up the flag and exit
+          await redis.del(`campaign_db_updated:${campaign_id}`);
+          console.log(`[${requestId}] ✅ Flag cleaned up successfully`);
+          
+          websocketLogger.log(requestId, `✅ WORKER PROTECTION: Campaign ${campaign_id} database already updated by worker. Failed handler skipped.`, 'info');
+          return; // Exit immediately
+        } else {
+          console.log(`[${requestId}] 📝 NO FLAG FOUND: Failed handler will continue with normal processing`);
+          console.log(`[${requestId}] 🔄 This indicates either: 1) Normal campaign, or 2) Worker hasn't set flag yet`);
+        }
+      } catch (flagCheckError) {
+        console.error(`[${requestId}] ❌ FLAG CHECK ERROR: ${flagCheckError.message}`);
+        console.error(`[${requestId}] 🔄 Continuing with normal processing despite flag check error`);
+      }
+    } else {
+      console.log(`[${requestId}] ⚠️ NO CAMPAIGN ID: Skipping flag check (campaign_id is ${campaign_id})`);
+    }
 
     // Remove jobId from campaign set
     if (campaign_id) {
@@ -240,6 +465,35 @@ for (const cat of categories) {
       console.log(`[${requestId}] Campaign ${campaign_id}: ${remaining} jobs remaining`);
 
       if (remaining === 0) {
+        // AGGRESSIVE RETRY DETECTION: Check database first before any processing
+        console.log(`[${requestId}] AGGRESSIVE RETRY CHECK: Checking database before processing campaign ${campaign_id}`);
+        
+        try {
+          const authToken = process.env.UTIL_TOKEN;
+          const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
+          const quickCheckResponse = await axios.get(`${apiUpdateUrl}`, {
+            headers: {
+              'accept': 'application/json',
+              'x-util-secret': authToken,
+            }
+          });
+          
+          if (quickCheckResponse.data && quickCheckResponse.data.logs && Object.keys(quickCheckResponse.data.logs).length > 0) {
+            console.log(`[${requestId}] AGGRESSIVE RETRY DETECTION: Campaign ${campaign_id} already has logs in database. SKIPPING all processing to prevent override.`);
+            
+            // Clean up Redis keys and exit immediately
+            await redis.del(`campaign_jobs:${campaign_id}`);
+            await redis.del(`campaign_total:${campaign_id}`);
+            await redis.del(`campaign_success:${campaign_id}`);
+            await redis.del(`campaign_logs:${campaign_id}`);
+            
+            websocketLogger.log(requestId, `✅ RETRY PREVENTED: Campaign ${campaign_id} already has logs. Skipped processing to prevent override.`, 'info');
+            return; // Exit immediately
+          }
+        } catch (quickCheckError) {
+          console.log(`[${requestId}] Quick retry check failed: ${quickCheckError.message}`);
+        }
+        
         // All jobs for this campaign are done, get aggregated logs
         console.log(`[${requestId}] Starting log aggregation for campaign ${campaign_id}`);
         const campaignLogsData = await redis.get(`campaign_logs:${campaign_id}`);
@@ -264,26 +518,155 @@ for (const cat of categories) {
         const resultString = `${successCount}/${totalCount}`;
         const finalStatus = successCount > 0 ? 'completed' : 'failed'; // Failed only if ALL jobs failed
         console.log(`[${requestId}] Campaign ${campaign_id} final stats: ${resultString}, status: ${finalStatus}`);
+        console.log(`[${requestId}] QUEUE EVENT DEBUG: Job failed, checking if should update database`);
+        console.log(`[${requestId}] QUEUE EVENT DEBUG: Total jobs for campaign: ${totalCount}, Success: ${successCount}`);
+        
+        // Enhanced retry detection - check if logs already contain retry markers
+        let isRetryScenario = false;
+        let existingCampaignStatus = null;
+        
+        // First check: Look for retry markers in the Redis logs themselves
+        if (campaignLogsData) {
+          try {
+            const parsedData = JSON.parse(campaignLogsData);
+            if (parsedData.attempts || parsedData.results) {
+              // Check if any website has multiple attempts (indicating retries)
+              const hasRetries = Object.values(parsedData.attempts || {}).some(attempts => 
+                Array.isArray(attempts) && attempts.length > 1
+              );
+              
+              if (hasRetries) {
+                isRetryScenario = true;
+                console.log(`[${requestId}] RETRY DETECTED: Found multiple attempts in Redis logs for campaign ${campaign_id}`);
+              }
+            }
+          } catch (parseError) {
+            console.log(`[${requestId}] Could not parse Redis logs for retry detection: ${parseError.message}`);
+          }
+        }
+        
+        // Second check: Compare with database status if first check didn't detect retry
+        if (!isRetryScenario && campaign_id && user_id) {
+          try {
+            const authToken = process.env.UTIL_TOKEN;
+            const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
+            const existingCampaignResponse = await axios.get(`${apiUpdateUrl}`, {
+              headers: {
+                'accept': 'application/json',
+                'x-util-secret': authToken,
+              }
+            });
+            
+            if (existingCampaignResponse.data) {
+              existingCampaignStatus = existingCampaignResponse.data.status;
+              
+              // If campaign was already completed/failed, this is likely a retry
+              if (existingCampaignStatus === 'completed' || existingCampaignStatus === 'failed') {
+                isRetryScenario = true;
+                console.log(`[${requestId}] RETRY DETECTED: Campaign ${campaign_id} was already ${existingCampaignStatus}, processing ${totalCount} job(s). This appears to be a retry.`);
+              }
+            }
+          } catch (fetchError) {
+            console.log(`[${requestId}] Could not fetch existing campaign status: ${fetchError.message}`);
+          }
+        }
+        
+        // HYBRID APPROACH: If this is a retry scenario, publishWorker.js already updated database
+        if (isRetryScenario) {
+          console.log(`[${requestId}] 🛡️ RETRY SCENARIO: Database already updated by publishWorker.js to prevent override`);
+          console.log(`[${requestId}] 🔄 Queue handler skipping database update for retry protection`);
+          
+          // Clean up Redis keys and exit early
+          console.log(`[${requestId}] Cleaning up Redis keys for retry scenario campaign ${campaign_id}`);
+          await redis.del(`campaign_jobs:${campaign_id}`);
+          await redis.del(`campaign_total:${campaign_id}`);
+          await redis.del(`campaign_success:${campaign_id}`);
+          await redis.del(`campaign_logs:${campaign_id}`);
+          
+          websocketLogger.log(requestId, `✅ Retry completed for campaign ${campaign_id}. Database updated by worker with proper log merging.`, 'info');
+          return; // Exit early, don't update database
+        }
+        
+        console.log(`[${requestId}] 📝 NORMAL SCENARIO: Queue handler will update database as usual`);
 
         if (campaign_id && user_id) {
           try {
             const apiUpdateUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaign_id}`;
+            
+            // First, fetch existing campaign data to merge logs instead of overriding
+            let existingLogs = {};
+            try {
+              const authToken = process.env.UTIL_TOKEN;
+              const existingCampaignResponse = await axios.get(`${apiUpdateUrl}`, {
+                headers: {
+                  'accept': 'application/json',
+                  'x-util-secret': authToken,
+                }
+              });
+              
+              if (existingCampaignResponse.data && existingCampaignResponse.data.logs) {
+                existingLogs = existingCampaignResponse.data.logs;
+                console.log(`[${requestId}] Found existing logs for campaign ${campaign_id}, merging with new logs`);
+              }
+            } catch (fetchError) {
+              console.log(`[${requestId}] Could not fetch existing campaign logs (${fetchError.message}), proceeding with new logs only`);
+            }
+
+            // Merge existing logs with new logs (preserve existing, append new)
+            const mergedLogs = { ...existingLogs };
+            
+            for (const category in aggregatedLogs) {
+              if (aggregatedLogs.hasOwnProperty(category)) {
+                const newCategoryData = {
+                  ...aggregatedLogs[category],
+                  result: resultString,
+                  timestamp: new Date().toISOString(),
+                  isRetry: !!existingLogs[category] // Mark as retry if category already exists
+                };
+
+                if (existingLogs[category]) {
+                  // Category exists - merge logs instead of overriding
+                  try {
+                    const existingCategoryData = typeof existingLogs[category] === 'string' 
+                      ? JSON.parse(existingLogs[category]) 
+                      : existingLogs[category];
+                    
+                    const mergedCategoryData = {
+                      logs: [
+                        ...(existingCategoryData.logs || []),
+                        ...newCategoryData.logs
+                      ],
+                      result: newCategoryData.result, // Update with latest result
+                      lastUpdated: new Date().toISOString(),
+                      totalAttempts: (existingCategoryData.totalAttempts || 1) + 1,
+                      isRetry: true
+                    };
+                    
+                    mergedLogs[category] = JSON.stringify(mergedCategoryData);
+                    console.log(`[${requestId}] MERGED logs for category ${category} (attempt #${mergedCategoryData.totalAttempts})`);
+                  } catch (parseError) {
+                    console.log(`[${requestId}] Could not parse existing logs for ${category}, using new logs only`);
+                    mergedLogs[category] = JSON.stringify(newCategoryData);
+                  }
+                } else {
+                  // New category - add as is
+                  mergedLogs[category] = JSON.stringify({
+                    ...newCategoryData,
+                    totalAttempts: 1,
+                    isRetry: false
+                  });
+                  console.log(`[${requestId}] ADDED new category ${category}`);
+                }
+              }
+            }
+
             const updatePayload = {
               user_id: user_id,
-              logs: {},
+              logs: mergedLogs, // Use merged logs instead of empty object
               status: finalStatus,
               result: resultString,
             };
-            for (const category in aggregatedLogs) {
-              if (aggregatedLogs.hasOwnProperty(category)) {
-                // Add result field as sibling to category logs
-                const categoryData = {
-                  ...aggregatedLogs[category],
-                  result: resultString // Add result as sibling field
-                };
-                updatePayload.logs[category] = JSON.stringify(categoryData);
-              }
-            }
+
             const authToken = process.env.UTIL_TOKEN;
             const apiResponse = await axios.put(apiUpdateUrl, updatePayload, {
               headers: {

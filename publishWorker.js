@@ -257,24 +257,117 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
   const key = `campaign_logs:${campaignId}`;
 
   try {
-    // Get existing logs
+    // Use Redis WATCH for atomic operations to prevent race conditions during retries
+    await connection.watch(key);
+    
+    // Get existing logs from Redis first
     const existingData = await connection.get(key);
     let mergedLogs = {};
 
     if (existingData) {
       try {
         mergedLogs = JSON.parse(existingData);
+        console.log(`[mergeCampaignLogs] Found existing logs in Redis for campaign ${campaignId}, merging with new data`);
+        console.log(`[mergeCampaignLogs] Existing Redis logs structure:`, {
+          hasLogs: !!mergedLogs.logs,
+          hasAttempts: !!mergedLogs.attempts,
+          hasResults: !!mergedLogs.results,
+          categories: Object.keys(mergedLogs.logs || {}),
+          attemptKeys: Object.keys(mergedLogs.attempts || {}),
+          resultKeys: Object.keys(mergedLogs.results || {})
+        });
       } catch (parseError) {
-        console.error(`[mergeCampaignLogs] Error parsing existing data for campaign ${campaignId}:`, parseError);
+        console.error(`[mergeCampaignLogs] Error parsing existing Redis data for campaign ${campaignId}:`, parseError);
         mergedLogs = {};
+      }
+    } else {
+      // Redis is empty (likely cleaned up after previous completion), try to fetch from database
+      console.log(`[mergeCampaignLogs] No existing logs in Redis for campaign ${campaignId}, checking database...`);
+      console.log(`[mergeCampaignLogs] This indicates Redis was cleaned up after previous completion - attempting database fetch`);
+      
+      try {
+        // Import axios dynamically since it's not imported at the top
+        const axios = (await import('axios')).default;
+        
+        const authToken = process.env.UTIL_TOKEN;
+        const apiUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaignId}`;
+        const dbResponse = await axios.get(apiUrl, {
+          headers: {
+            'accept': 'application/json',
+            'x-util-secret': authToken,
+          }
+        });
+        
+        if (dbResponse.status === 200 && dbResponse.data) {
+          const dbData = dbResponse.data;
+          console.log(`[mergeCampaignLogs] Database response received for campaign ${campaignId}:`, {
+            hasLogs: !!dbData.logs,
+            status: dbData.status,
+            logCategories: dbData.logs ? Object.keys(dbData.logs) : []
+          });
+          
+          if (dbData && dbData.logs) {
+            console.log(`[mergeCampaignLogs] Found existing logs in database for campaign ${campaignId}, converting to Redis format`);
+            console.log(`[mergeCampaignLogs] Database logs structure:`, dbData.logs);
+            
+            // Convert database logs back to Redis format for merging
+            mergedLogs = {
+              userId: newLogData.userId,
+              logs: {},
+              attempts: {},
+              results: {},
+              createdAt: dbData.created_at,
+              lastUpdated: new Date().toISOString()
+            };
+            
+            // Parse existing database logs into Redis format
+            for (const [category, logData] of Object.entries(dbData.logs)) {
+              try {
+                const parsedLogData = typeof logData === 'string' ? JSON.parse(logData) : logData;
+                mergedLogs.logs[category] = { logs: parsedLogData.logs || [] };
+                
+                // Reconstruct attempts and results from existing logs
+                const websiteKey = `${newLogData.website}_${category}`;
+                mergedLogs.attempts[websiteKey] = [{
+                  timestamp: parsedLogData.timestamp || dbData.updated_at,
+                  result: parsedLogData.result === '1/1' || parsedLogData.result === '1/0' ? 'success' : 'failure',
+                  logs: parsedLogData.logs || [],
+                  website: newLogData.website,
+                  attemptNumber: parsedLogData.totalAttempts || 1,
+                  isRetry: parsedLogData.isRetry || false
+                }];
+                
+                mergedLogs.results[websiteKey] = {
+                  website: newLogData.website,
+                  category: category,
+                  finalResult: parsedLogData.result === '1/1' || parsedLogData.result === '1/0' ? 'success' : 'failure',
+                  lastAttempt: parsedLogData.timestamp || dbData.updated_at,
+                  totalAttempts: parsedLogData.totalAttempts || 1,
+                  isRetry: false
+                };
+              } catch (parseError) {
+                console.log(`[mergeCampaignLogs] Could not parse database logs for category ${category}:`, parseError);
+              }
+            }
+          }
+        }
+      } catch (dbError) {
+        console.error(`[mergeCampaignLogs] ERROR: Could not fetch from database for campaign ${campaignId}:`, dbError.message);
+        console.error(`[mergeCampaignLogs] ERROR: Database fetch failed, proceeding with empty logs`);
+      }
+      
+      if (Object.keys(mergedLogs).length === 0) {
+        console.log(`[mergeCampaignLogs] Creating completely new log structure for campaign ${campaignId}`);
       }
     }
 
-    // Initialize structure if needed
+    // Initialize structure if needed (preserve existing data)
     if (!mergedLogs.userId) mergedLogs.userId = newLogData.userId;
     if (!mergedLogs.logs) mergedLogs.logs = {};
     if (!mergedLogs.attempts) mergedLogs.attempts = {}; // Track attempts per website
     if (!mergedLogs.results) mergedLogs.results = {}; // Track final results per website
+    if (!mergedLogs.createdAt) mergedLogs.createdAt = new Date().toISOString();
+    mergedLogs.lastUpdated = new Date().toISOString();
 
     // Initialize category if not present
     if (!mergedLogs.logs[newLogData.category]) {
@@ -284,17 +377,49 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
     // Create unique identifier for this website attempt
     const websiteKey = `${newLogData.website}_${newLogData.category}`;
     
-    // Initialize attempt tracking for this website
+    // Initialize attempt tracking for this website (preserve existing attempts)
     if (!mergedLogs.attempts[websiteKey]) {
       mergedLogs.attempts[websiteKey] = [];
     }
 
-    // Add this attempt with timestamp
+    // ENHANCED RETRY DETECTION: Check both Redis and Database
+    const existingAttempts = mergedLogs.attempts[websiteKey].length;
+    let isRetry = existingAttempts > 0; // Redis-based detection
+    
+    // ALWAYS check database for existing logs (more reliable than Redis)
+    let databaseHasLogs = false;
+    try {
+      const axios = (await import('axios')).default;
+      const authToken = process.env.UTIL_TOKEN;
+      const apiUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaignId}`;
+      const dbCheckResponse = await axios.get(apiUrl, {
+        headers: {
+          'accept': 'application/json',
+          'x-util-secret': authToken,
+        }
+      });
+      
+      if (dbCheckResponse.data && dbCheckResponse.data.logs && Object.keys(dbCheckResponse.data.logs).length > 0) {
+        databaseHasLogs = true;
+        isRetry = true; // Override Redis detection - database is the source of truth
+        console.log(`[mergeCampaignLogs] DATABASE RETRY DETECTION: Campaign ${campaignId} already has logs in database`);
+      }
+    } catch (dbCheckError) {
+      console.log(`[mergeCampaignLogs] Database check failed: ${dbCheckError.message}`);
+    }
+    
+    if (isRetry) {
+      console.log(`[mergeCampaignLogs] RETRY detected for ${websiteKey} - attempt #${existingAttempts + 1} (Redis: ${existingAttempts > 0}, Database: ${databaseHasLogs})`);
+    }
+
+    // Add this attempt with timestamp and retry info
     const attemptData = {
       timestamp: new Date().toISOString(),
       result: newLogData.result,
       logs: newLogData.logs,
-      website: newLogData.website
+      website: newLogData.website,
+      attemptNumber: existingAttempts + 1,
+      isRetry: isRetry
     };
     
     mergedLogs.attempts[websiteKey].push(attemptData);
@@ -305,11 +430,19 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
       category: newLogData.category,
       finalResult: newLogData.result,
       lastAttempt: new Date().toISOString(),
-      totalAttempts: mergedLogs.attempts[websiteKey].length
+      totalAttempts: mergedLogs.attempts[websiteKey].length,
+      isRetry: isRetry
     };
 
-    // Add logs to category (append all logs for visibility)
-    mergedLogs.logs[newLogData.category].logs.push(...newLogData.logs);
+    // Add logs to category (append all logs for visibility, with retry markers)
+    const logsToAdd = newLogData.logs.map(log => ({
+      ...log,
+      attemptNumber: existingAttempts + 1,
+      isRetry: isRetry,
+      timestamp: log.timestamp || new Date().toISOString()
+    }));
+    
+    mergedLogs.logs[newLogData.category].logs.push(...logsToAdd);
 
     // Calculate accurate statistics based on unique websites
     const uniqueWebsites = Object.keys(mergedLogs.results);
@@ -330,14 +463,96 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
     
     mergedLogs.logs[newLogData.category].result = `${categorySuccesses.length}/${categoryWebsites.length}`;
 
-    // Store merged logs back to Redis
-    await connection.set(key, JSON.stringify(mergedLogs));
+    // Use Redis transaction to atomically update the data
+    const multi = connection.multi();
+    multi.set(key, JSON.stringify(mergedLogs));
+    
+    const result = await multi.exec();
+    
+    if (result === null) {
+      // Transaction was discarded due to WATCH key being modified
+      console.log(`[mergeCampaignLogs] Transaction discarded for campaign ${campaignId} due to concurrent modification, retrying...`);
+      // Retry the operation
+      await connection.unwatch();
+      return await mergeCampaignLogs(campaignId, newLogData);
+    }
 
+    await connection.unwatch();
     console.log(`[mergeCampaignLogs] Successfully merged logs for campaign ${campaignId}, website ${newLogData.website}. Overall: ${mergedLogs.successCount}/${mergedLogs.totalCount}, Category ${newLogData.category}: ${categorySuccesses.length}/${categoryWebsites.length}`);
+    
+    // NUCLEAR APPROACH: ALWAYS update database directly and set flag to prevent queue handler override
+    console.log(`[mergeCampaignLogs] 🚀 NUCLEAR APPROACH ACTIVATED for campaign ${campaignId}`);
+    console.log(`[mergeCampaignLogs] 📊 Campaign Stats: Success=${mergedLogs.successCount}, Total=${mergedLogs.totalCount}`);
+    console.log(`[mergeCampaignLogs] 🔍 Retry Detection: isRetry=${isRetry}, databaseHasLogs=${databaseHasLogs}`);
+    console.log(`[mergeCampaignLogs] 🌐 Website: ${newLogData.website}, Category: ${newLogData.category}, Result: ${newLogData.result}`);
+    console.log(`[mergeCampaignLogs] 📝 Log Count: ${newLogData.logs.length} new logs to merge`);
+    
+    try {
+        const axios = (await import('axios')).default;
+        const authToken = process.env.UTIL_TOKEN;
+        const apiUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaignId}`;
+        
+        // Prepare database-compatible logs format
+        const dbLogs = {};
+        for (const [category, categoryData] of Object.entries(mergedLogs.logs)) {
+          dbLogs[category] = JSON.stringify({
+            logs: categoryData.logs,
+            result: categoryData.result,
+            timestamp: mergedLogs.lastUpdated,
+            totalAttempts: Object.values(mergedLogs.attempts).filter(attempts => 
+              attempts.some(attempt => attempt.logs.some(log => log.message.includes(category)))
+            ).length,
+            isRetry: true
+          });
+        }
+        
+        // Calculate overall status
+        const overallStatus = mergedLogs.successCount > 0 ? 'completed' : 'failed';
+        const overallResult = `${mergedLogs.successCount}/${mergedLogs.totalCount}`;
+        
+        const updatePayload = {
+          user_id: newLogData.userId,
+          logs: dbLogs,
+          status: overallStatus,
+          result: overallResult,
+          updated_by: 'publishWorker_retry'
+        };
+        
+        console.log(`[mergeCampaignLogs] Updating database for retry - Status: ${overallStatus}, Result: ${overallResult}`);
+        
+        const dbResponse = await axios.put(apiUrl, updatePayload, {
+          headers: {
+            'accept': 'application/json',
+            'x-util-secret': authToken,
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        console.log(`[mergeCampaignLogs] ✅ Database updated successfully for retry scenario. Status: ${dbResponse.status}`);
+        
+        // Set a Redis flag to prevent queue handlers from updating database
+        await connection.set(`campaign_db_updated:${campaignId}`, 'true', 'EX', 3600); // Expire in 1 hour
+        console.log(`[mergeCampaignLogs] 🚩 Set Redis flag to prevent queue handler database update`);
+        
+      } catch (dbUpdateError) {
+        console.error(`[mergeCampaignLogs] ❌ Failed to update database for retry: ${dbUpdateError.message}`);
+        // Don't throw error - Redis update was successful, database update is secondary
+      }
   } catch (error) {
     console.error(`[mergeCampaignLogs] Error merging logs for campaign ${campaignId}:`, error);
+    await connection.unwatch();
+    
     // Fallback: store as individual entry if merge fails
-    await connection.rpush(key + '_fallback', JSON.stringify(newLogData));
+    try {
+      await connection.rpush(key + '_fallback', JSON.stringify({
+        ...newLogData,
+        timestamp: new Date().toISOString(),
+        error: 'Failed to merge with main logs'
+      }));
+      console.log(`[mergeCampaignLogs] Stored fallback log for campaign ${campaignId}`);
+    } catch (fallbackError) {
+      console.error(`[mergeCampaignLogs] Even fallback failed for campaign ${campaignId}:`, fallbackError);
+    }
   }
 };
 
