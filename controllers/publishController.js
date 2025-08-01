@@ -251,11 +251,11 @@ export const publish = async (req, res) => {
       requestId: requestId
     });
   } else {
-    // No eligible websites: push log to Redis using merge function
+    // No eligible websites: push log to Redis using improved merge function
     const campaign_id = jobData.campaignId || (req.body.info && req.body.info.campaign_id);
     const user_id = jobData.userId || (req.body.info && req.body.info.user_id);
     if (campaign_id) {
-      // Use the same merge logic as in publishWorker.js
+      // Use the same improved merge logic as in publishWorker.js
       const key = `campaign_logs:${campaign_id}`;
       const existingData = await redisClient.get(key);
       let mergedLogs = {};
@@ -269,19 +269,26 @@ export const publish = async (req, res) => {
         }
       }
 
-      // Initialize structure if needed
+      // Initialize structure with new format
       if (!mergedLogs.userId) mergedLogs.userId = user_id;
       if (!mergedLogs.logs) mergedLogs.logs = {};
+      if (!mergedLogs.attempts) mergedLogs.attempts = {};
+      if (!mergedLogs.results) mergedLogs.results = {};
       if (!mergedLogs.logs.uncategorized) {
-        mergedLogs.logs.uncategorized = { logs: [], result: 'pending' };
+        mergedLogs.logs.uncategorized = { logs: [] };
       }
 
       // Add error log
       mergedLogs.logs.uncategorized.logs.push({
         message: jobData.error || 'No eligible websites found for publication.',
-        level: 'error'
+        level: 'error',
+        timestamp: new Date().toISOString()
       });
-      mergedLogs.logs.uncategorized.result = 'failure';
+
+      // Set counts to 0 since no websites were processed
+      mergedLogs.successCount = 0;
+      mergedLogs.totalCount = 0;
+      mergedLogs.logs.uncategorized.result = '0/0';
 
       // Store merged logs back to Redis
       await redisClient.set(key, JSON.stringify(mergedLogs));

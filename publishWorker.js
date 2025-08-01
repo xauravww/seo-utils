@@ -252,7 +252,7 @@ redisPublisher.on('error', (err) => {
   console.error('[publishWorker.js][REDIS ERROR][redisPublisher]', err);
 });
 
-// Function to merge campaign logs atomically
+// Function to merge campaign logs atomically with proper retry handling
 const mergeCampaignLogs = async (campaignId, newLogData) => {
   const key = `campaign_logs:${campaignId}`;
 
@@ -273,30 +273,67 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
     // Initialize structure if needed
     if (!mergedLogs.userId) mergedLogs.userId = newLogData.userId;
     if (!mergedLogs.logs) mergedLogs.logs = {};
+    if (!mergedLogs.attempts) mergedLogs.attempts = {}; // Track attempts per website
+    if (!mergedLogs.results) mergedLogs.results = {}; // Track final results per website
+
+    // Initialize category if not present
     if (!mergedLogs.logs[newLogData.category]) {
       mergedLogs.logs[newLogData.category] = { logs: [] };
     }
 
-    // Add new logs to existing category logs
-    mergedLogs.logs[newLogData.category].logs.push(...newLogData.logs);
-
-    // Initialize counters if not present
-    if (!mergedLogs.successCount) mergedLogs.successCount = 0;
-    if (!mergedLogs.totalCount) mergedLogs.totalCount = 0;
-
-    // Update counters based on job result
-    mergedLogs.totalCount++;
-    if (newLogData.result === 'success') {
-      mergedLogs.successCount++;
+    // Create unique identifier for this website attempt
+    const websiteKey = `${newLogData.website}_${newLogData.category}`;
+    
+    // Initialize attempt tracking for this website
+    if (!mergedLogs.attempts[websiteKey]) {
+      mergedLogs.attempts[websiteKey] = [];
     }
 
-    // Update result field for this category
-    mergedLogs.logs[newLogData.category].result = `${mergedLogs.successCount}/${mergedLogs.totalCount}`;
+    // Add this attempt with timestamp
+    const attemptData = {
+      timestamp: new Date().toISOString(),
+      result: newLogData.result,
+      logs: newLogData.logs,
+      website: newLogData.website
+    };
+    
+    mergedLogs.attempts[websiteKey].push(attemptData);
+
+    // Update the final result for this website (latest attempt wins)
+    mergedLogs.results[websiteKey] = {
+      website: newLogData.website,
+      category: newLogData.category,
+      finalResult: newLogData.result,
+      lastAttempt: new Date().toISOString(),
+      totalAttempts: mergedLogs.attempts[websiteKey].length
+    };
+
+    // Add logs to category (append all logs for visibility)
+    mergedLogs.logs[newLogData.category].logs.push(...newLogData.logs);
+
+    // Calculate accurate statistics based on unique websites
+    const uniqueWebsites = Object.keys(mergedLogs.results);
+    const successfulWebsites = uniqueWebsites.filter(key => 
+      mergedLogs.results[key].finalResult === 'success'
+    );
+
+    mergedLogs.successCount = successfulWebsites.length;
+    mergedLogs.totalCount = uniqueWebsites.length;
+
+    // Update result field for this category based on actual unique results
+    const categoryWebsites = uniqueWebsites.filter(key => 
+      mergedLogs.results[key].category === newLogData.category
+    );
+    const categorySuccesses = categoryWebsites.filter(key => 
+      mergedLogs.results[key].finalResult === 'success'
+    );
+    
+    mergedLogs.logs[newLogData.category].result = `${categorySuccesses.length}/${categoryWebsites.length}`;
 
     // Store merged logs back to Redis
     await connection.set(key, JSON.stringify(mergedLogs));
 
-    console.log(`[mergeCampaignLogs] Successfully merged logs for campaign ${campaignId}, category ${newLogData.category}. Result: ${mergedLogs.successCount}/${mergedLogs.totalCount}`);
+    console.log(`[mergeCampaignLogs] Successfully merged logs for campaign ${campaignId}, website ${newLogData.website}. Overall: ${mergedLogs.successCount}/${mergedLogs.totalCount}, Category ${newLogData.category}: ${categorySuccesses.length}/${categoryWebsites.length}`);
   } catch (error) {
     console.error(`[mergeCampaignLogs] Error merging logs for campaign ${campaignId}:`, error);
     // Fallback: store as individual entry if merge fails
