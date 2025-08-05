@@ -20,6 +20,10 @@ import OClickerClassifiedAdapter from './classified/OClickerClassifiedAdapter.js
 import GainWebAdapter from './directory/GainWebAdapter.js';
 import SocialSubmissionEngineAdapter from './directory/SocialSubmissionEngineAdapter.js';
 import DevToAdapter from './blog/DevToAdapter.js';
+import PastebinAdapter from './article/PastebinAdapter.js';
+import DPasteAdapter from './article/DPasteAdapter.js';
+import ControlCAdapter from './article/ControlCAdapter.js';
+import Cl1pAdapter from './article/Cl1pAdapter.js';
 import HashnodeAdapter from './blog/HashnodeAdapter.js';
 import TumblrAdapter from './blog/TumblrAdapter.js';
 import PrePostSEOPingAdapter from './ping/PrePostSEOPingAdapter.js'
@@ -50,5 +54,12 @@ export {
   SocialSubmissionEngineAdapter,
   DevToAdapter,
   HashnodeAdapter,
-  TumblrAdapter,PrePostSEOPingAdapter,BacklinkPingAdapter,ExciteSubmitAdapter
+  TumblrAdapter,
+  PrePostSEOPingAdapter,
+  BacklinkPingAdapter,
+  ExciteSubmitAdapter,
+  PastebinAdapter,
+  DPasteAdapter,
+  ControlCAdapter,
+  Cl1pAdapter
 };

@@ -67,6 +67,8 @@ const processWebsite = async (jobDetails, job) => {
   // 1. Get the correct adapter for the website
   console.log(`[${requestId}] [Worker] Getting adapter for category: '${category}', url: ${url}`);
   const adapter = getAdapter({ ...jobDetails, job });
+  console.log(`[DEBUG] [${requestId}] Adapter instance:`, adapter
+  )
 
   let adapterLogs = []; // Initialize an array to hold logs from this adapter
   // 2. If adapter exists, run it
@@ -160,73 +162,7 @@ const processWebsite = async (jobDetails, job) => {
   }
 };
 
-const run = async (workerData) => {
-  const { requestId, websites, content, campaignId, minimumInclude } = workerData;
-  console.log(`[${requestId}] [Worker] Background worker starting. Processing ${websites.length} websites.`);
-
-  publishLog(requestId, `[Worker] Background worker started. Processing ${websites.length} websites.`, 'info');
-
-  let allSuccess = true; // Track overall success
-  const results = []; // Array to store results from each adapter
-  const categorizedLogs = {}; // Object to store logs categorized by website category
-
-  // --- FIXED LOGIC: Process sites sequentially by score priority until minimumInclude OR all sites tried ---
-  let successCount = 0;
-  let processedCount = 0;
-  const maxTries = websites.length;
-
-  console.log(`[${requestId}] Processing websites in score order. MinimumInclude: ${minimumInclude || 'not set'}`);
-
-  // Process websites sequentially (they're already sorted by score in publishController)
-  for (let i = 0; i < websites.length; i++) {
-    const website = websites[i];
-    console.log(`[${requestId}] Processing site ${i + 1}/${websites.length}: ${website.url} (score: ${website.score || 'null'})`);
-
-    const result = await processWebsite({ requestId, website, content, campaignId }, null);
-    results.push(result);
-    processedCount++;
-
-    if (result && result.success) {
-      successCount++;
-      console.log(`[${requestId}] Success ${successCount} achieved from ${website.url}`);
-
-      // STOP immediately if we've reached minimumInclude successful posts
-      if (minimumInclude && successCount >= minimumInclude) {
-        console.log(`[${requestId}] Reached minimumInclude (${minimumInclude}), stopping further processing`);
-        break;
-      }
-    } else {
-      allSuccess = false;
-      console.log(`[${requestId}] Site ${website.url} failed, continuing to next site`);
-    }
-
-    // Aggregate logs by parent category
-    if (result.category && result.adapterLogs) {
-      const parentCategory = getParentCategory(result.category);
-      if (!categorizedLogs[parentCategory]) {
-        categorizedLogs[parentCategory] = { logs: [], result: '' };
-      }
-      categorizedLogs[parentCategory].logs.push(...result.adapterLogs);
-    }
-  }
-  // Add result string to each category - show actual success vs total processed
-  for (const cat in categorizedLogs) {
-    categorizedLogs[cat].result = `${successCount}/${processedCount}`;
-  }
-  // --- END FIXED LOGIC ---
-
-  // Always return 'done' status since campaign is always considered completed
-  const totalProcessed = results.length;
-  const message = minimumInclude
-    ? `Publications completed: ${successCount}/${minimumInclude} (minimum required) out of ${totalProcessed} sites tried`
-    : `Publications completed: ${successCount}/${totalProcessed} sites processed`;
-
-  publishLog(requestId, `[Worker] ${message} for request ${requestId}.`, successCount > 0 ? 'success' : 'info');
-  console.log(`[${requestId}] [Worker] ${message}.`);
-
-  // Always return 'done' status - campaign completion is determined by job completion, not success rate
-  return { status: 'done', results, categorizedLogs, successCount, totalProcessed };
-};
+// Legacy run function removed - now using BullMQ workers instead
 console.log('[publishWorker.js] REDIS_HOST:', process.env.REDIS_HOST);
 
 // Replace connection and redisPublisher with ioredis clients
@@ -251,6 +187,108 @@ connection.on('error', (err) => {
 redisPublisher.on('error', (err) => {
   console.error('[publishWorker.js][REDIS ERROR][redisPublisher]', err);
 });
+
+// Helper function to safely parse database log data
+const parseDbLogData = (logData, category, fallbackTimestamp) => {
+  console.log(`[parseDbLogData] Processing category ${category}, logData type: ${typeof logData}`);
+
+  // Handle null or undefined values
+  if (logData === null || logData === undefined) {
+    console.log(`[parseDbLogData] Null/undefined data for category ${category}, creating empty structure`);
+    return {
+      logs: [],
+      result: '0/1',
+      timestamp: fallbackTimestamp,
+      totalAttempts: 0,
+      isRetry: false
+    };
+  }
+
+  // Handle different data formats from database
+  if (typeof logData === 'string') {
+    // Skip empty strings
+    if (logData.trim() === '') {
+      console.log(`[parseDbLogData] Empty string for category ${category}`);
+      return {
+        logs: [],
+        result: '0/1',
+        timestamp: fallbackTimestamp,
+        totalAttempts: 0,
+        isRetry: false
+      };
+    }
+
+    // Try to parse as JSON first
+    try {
+      const parsed = JSON.parse(logData);
+      console.log(`[parseDbLogData] Successfully parsed JSON for category ${category}`);
+
+      // Ensure the parsed object has the required structure
+      return {
+        logs: Array.isArray(parsed.logs) ? parsed.logs : [],
+        result: parsed.result || '1/1',
+        timestamp: parsed.timestamp || fallbackTimestamp,
+        totalAttempts: parsed.totalAttempts || 1,
+        isRetry: parsed.isRetry || false,
+        ...parsed
+      };
+    } catch (jsonError) {
+      // If JSON parsing fails, treat as plain string value
+      console.log(`[parseDbLogData] JSON parse failed for category ${category}, treating as plain string. Error: ${jsonError.message}`);
+
+      // Handle plain string values that are not JSON
+      if (logData === 'completed' || logData === 'failed' || logData === 'pending') {
+        // This appears to be a status string
+        return {
+          logs: [{ message: `Status: ${logData}`, level: 'info', timestamp: fallbackTimestamp }],
+          result: logData === 'completed' ? '1/1' : '0/1',
+          timestamp: fallbackTimestamp,
+          totalAttempts: 1,
+          isRetry: false
+        };
+      } else if (logData.match(/^\d{4}-\d{2}-\d{2}/)) {
+        // This appears to be a timestamp string
+        return {
+          logs: [{ message: `Timestamp recorded: ${logData}`, level: 'info', timestamp: logData }],
+          result: '1/1',
+          timestamp: logData,
+          totalAttempts: 1,
+          isRetry: false
+        };
+      } else {
+        // Generic string content (like "article", request IDs, titles, etc.)
+        return {
+          logs: [{ message: logData, level: 'info', timestamp: fallbackTimestamp }],
+          result: '1/1',
+          timestamp: fallbackTimestamp,
+          totalAttempts: 1,
+          isRetry: false
+        };
+      }
+    }
+  } else if (typeof logData === 'object' && logData !== null) {
+    // Already an object, use as-is but ensure it has required structure
+    console.log(`[parseDbLogData] Using object data directly for category ${category}`);
+    return {
+      logs: Array.isArray(logData.logs) ? logData.logs : [],
+      result: logData.result || '1/1',
+      timestamp: logData.timestamp || fallbackTimestamp,
+      totalAttempts: logData.totalAttempts || 1,
+      isRetry: logData.isRetry || false,
+      ...logData
+    };
+  } else {
+    // Handle other data types (numbers, booleans, etc.)
+    console.log(`[parseDbLogData] Unexpected data type for category ${category}: ${typeof logData}`);
+    return {
+      logs: [{ message: `Data: ${String(logData)}`, level: 'info', timestamp: fallbackTimestamp }],
+      result: '1/1',
+      timestamp: fallbackTimestamp,
+      totalAttempts: 1,
+      isRetry: false
+    };
+  }
+};
 
 // Function to merge campaign logs atomically with proper retry handling
 const mergeCampaignLogs = async (campaignId, newLogData) => {
@@ -295,6 +333,7 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
           headers: {
             'accept': 'application/json',
             'x-util-secret': authToken,
+            'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MjAsImVtYWlsIjoibWRhdXJhdmh1QGdtYWlsLmNvbSIsInJvbGUiOiJ1c2VyIiwiY29tcGFueV9pZCI6bnVsbCwiaWF0IjoxNzU0Mjk5NzEzLCJleHAiOjE3NTQzODYxMTN9.x43ABWmwfkCyz8mbuq7TBJFAFeXCmyFdmUNol89-eoo`
           }
         });
         
@@ -323,9 +362,15 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
             // Parse existing database logs into Redis format
             for (const [category, logData] of Object.entries(dbData.logs)) {
               try {
-                const parsedLogData = typeof logData === 'string' ? JSON.parse(logData) : logData;
-                mergedLogs.logs[category] = { logs: parsedLogData.logs || [] };
-                
+                const parsedLogData = parseDbLogData(logData, category, dbData.updated_at);
+
+                // Ensure parsedLogData has required structure
+                if (!parsedLogData.logs || !Array.isArray(parsedLogData.logs)) {
+                  parsedLogData.logs = [];
+                }
+
+                mergedLogs.logs[category] = { logs: parsedLogData.logs };
+
                 // Reconstruct attempts and results from existing logs
                 const websiteKey = `${newLogData.website}_${category}`;
                 mergedLogs.attempts[websiteKey] = [{
@@ -336,7 +381,7 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
                   attemptNumber: parsedLogData.totalAttempts || 1,
                   isRetry: parsedLogData.isRetry || false
                 }];
-                
+
                 mergedLogs.results[websiteKey] = {
                   website: newLogData.website,
                   category: category,
@@ -345,8 +390,40 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
                   totalAttempts: parsedLogData.totalAttempts || 1,
                   isRetry: false
                 };
+
+                console.log(`[mergeCampaignLogs] Successfully processed category ${category} with ${parsedLogData.logs.length} logs`);
+
               } catch (parseError) {
-                console.log(`[mergeCampaignLogs] Could not parse database logs for category ${category}:`, parseError);
+                console.error(`[mergeCampaignLogs] Error processing database logs for category ${category}:`, parseError);
+                console.error(`[mergeCampaignLogs] Raw logData for failed category:`, logData);
+
+                // Create fallback entry for failed parsing
+                mergedLogs.logs[category] = {
+                  logs: [{
+                    message: `Failed to parse database log: ${String(logData)}`,
+                    level: 'warning',
+                    timestamp: dbData.updated_at
+                  }]
+                };
+
+                const websiteKey = `${newLogData.website}_${category}`;
+                mergedLogs.attempts[websiteKey] = [{
+                  timestamp: dbData.updated_at,
+                  result: 'failure',
+                  logs: mergedLogs.logs[category].logs,
+                  website: newLogData.website,
+                  attemptNumber: 1,
+                  isRetry: false
+                }];
+
+                mergedLogs.results[websiteKey] = {
+                  website: newLogData.website,
+                  category: category,
+                  finalResult: 'failure',
+                  lastAttempt: dbData.updated_at,
+                  totalAttempts: 1,
+                  isRetry: false
+                };
               }
             }
           }
@@ -396,6 +473,7 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
         headers: {
           'accept': 'application/json',
           'x-util-secret': authToken,
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MjAsImVtYWlsIjoibWRhdXJhdmh1QGdtYWlsLmNvbSIsInJvbGUiOiJ1c2VyIiwiY29tcGFueV9pZCI6bnVsbCwiaWF0IjoxNzU0Mjk5NzEzLCJleHAiOjE3NTQzODYxMTN9.x43ABWmwfkCyz8mbuq7TBJFAFeXCmyFdmUNol89-eoo`
         }
       });
       
@@ -568,7 +646,6 @@ const startAllCategoryWorkers = () => {
         console.log(`[BullMQ] [${category}] Picked up job ${job.id} from ${category}Queue`);
         await job.log(`[BullMQ] [${category}] Picked up job ${job.id} from ${category}Queue`);
         // Support both old (reqBody) and new (per-website) job formats
-        let jobData;
         let requestId;
         if (job.data.reqBody) {
           // Old format: single job with reqBody
@@ -576,8 +653,9 @@ const startAllCategoryWorkers = () => {
           requestId = reqId;
           await job.log(`[BullMQ] [${category}] Starting job ${job.id} (requestId: ${requestId})`);
           try {
-            jobData = await processPublishJob(reqBody, requestId);
+            await processPublishJob(reqBody, requestId);
           } catch (err) {
+            // console.error(`[BullMQ] [${category}] Error processing job ${job.id}:`, err);
             const errMsg = `[BullMQ] [${category}] Error in processPublishJob for job ${job.id} (requestId: ${requestId}): ${err && err.stack ? err.stack : err}`;
             console.error(errMsg);
             await job.log(errMsg);
@@ -585,14 +663,15 @@ const startAllCategoryWorkers = () => {
           }
         } else {
           // New format: per-website job
-          const { website, content, campaignId, userId, minimumInclude, requestId: reqId } = job.data;
+          const { website, content, campaignId, userId, requestId: reqId } = job.data;
           requestId = reqId;
           await job.log(`[BullMQ] [${category}] Starting job ${job.id} (requestId: ${requestId})`);
 
           try {
             // Process the website
+            console.log("process website in startAllCategoryWorkers")
             const result = await processWebsite({ requestId, website, content, campaignId, userId }, job);
-
+ console.log("process website result in startAllCategoryWorkers: ",result)
             // Return success or throw error for BullMQ to handle correctly
             if (result.success) {
               return {

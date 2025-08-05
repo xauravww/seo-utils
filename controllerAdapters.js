@@ -49,7 +49,10 @@ import {
   DevToAdapter,
   HashnodeAdapter,
   PlurkAdapter,
-  TumblrAdapter,PrePostSEOPingAdapter,BacklinkPingAdapter,ExciteSubmitAdapter
+  TumblrAdapter,PrePostSEOPingAdapter,BacklinkPingAdapter,ExciteSubmitAdapter,
+  DPasteAdapter,
+  PastebinAdapter,
+  Cl1pAdapter
 } from './adapters/index.js';
 import BaseAdapter from './adapters/BaseAdapter.js';
 
@@ -88,6 +91,7 @@ function publishLog(requestId, message, level = 'info') {
 // --- Adapter map declaration ---
 const adapterMap = {
     '../controllers/wpPostController.js': WordPressAdapter,
+    '../controllers/postController.js': Cl1pAdapter, // Generic article posting
     '../controllers/ping/pingMyLinksController.js': PingMyLinksAdapter,
     'pingmylinks/googleping': PingMyLinksAdapter,
     'pingmylinks/searchsubmission': PingMyLinksAdapter,
@@ -146,9 +150,18 @@ const adapterMap = {
     'https://www.indiabook.com/cgi-bin/classifieds': IndiabookClassifiedAdapter,
     'classified/oclicker.com': OClickerClassifiedAdapter,
     'https://oclicker.com': OClickerClassifiedAdapter,
+    'https://dpaste.org': DPasteAdapter,
+    'dpaste.org': DPasteAdapter,
+    'https://pastebin.com': PastebinAdapter,
+    'pastebin.com': PastebinAdapter,
+    'article/dpaste': DPasteAdapter,
+    'article/pastebin': PastebinAdapter,
+    'article': Cl1pAdapter
 };
 
 export const getAdapter = (jobDetails) => {
+console.log('jobDetails', jobDetails);
+
     const controllerPath = getControllerForWebsite(jobDetails.website);
     console.log(`[getAdapter] controllerPath: ${controllerPath}`);
     console.log(`[getAdapter] jobDetails.website.category: ${jobDetails.website.category}`);
