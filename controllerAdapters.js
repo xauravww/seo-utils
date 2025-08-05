@@ -8,7 +8,6 @@ import { CookieJar } from 'tough-cookie';
 import { wrapper } from 'axios-cookiejar-support';
 import { load } from 'cheerio';
 import * as websocketLogger from './websocketLogger.js';
-import { getControllerForWebsite } from './websiteClassifier.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import cloudinary from 'cloudinary';
@@ -52,7 +51,10 @@ import {
   TumblrAdapter,PrePostSEOPingAdapter,BacklinkPingAdapter,ExciteSubmitAdapter,
   DPasteAdapter,
   PastebinAdapter,
-  Cl1pAdapter
+  Cl1pAdapter,
+  ControlCAdapter,
+  JumpArticlesAdapter,
+  ArticleBizAdapter
 } from './adapters/index.js';
 import BaseAdapter from './adapters/BaseAdapter.js';
 
@@ -66,7 +68,6 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-console.log('[controllerAdapters.js] REDIS_HOST:', process.env.REDIS_HOST);
 const redisProtocol = process.env.REDIS_PROTOCOL || 'redis://';
 const redisHost = process.env.REDIS_HOST || 'redis';
 const redisPort = process.env.REDIS_PORT || 6379;
@@ -79,7 +80,7 @@ const redisPublisher = createClient({
   url: redisUrl
 });
 redisPublisher.on('error', (err) => {
-  console.error('[controllerAdapters.js][REDIS ERROR]', err);
+  console.error('Redis connection error:', err.message);
 });
 await redisPublisher.connect();
 
@@ -88,114 +89,103 @@ function publishLog(requestId, message, level = 'info') {
     redisPublisher.publish(`logs:${requestId}`, payload);
 }
 
-// --- Adapter map declaration ---
-const adapterMap = {
-    '../controllers/wpPostController.js': WordPressAdapter,
-    '../controllers/postController.js': Cl1pAdapter, // Generic article posting
-    '../controllers/ping/pingMyLinksController.js': PingMyLinksAdapter,
-    'pingmylinks/googleping': PingMyLinksAdapter,
-    'pingmylinks/searchsubmission': PingMyLinksAdapter,
-    'pingmylinks/socialsubmission': PingMyLinksAdapter,
-    'https://www.pingmylinks.com/googleping': PingMyLinksAdapter,
-    'https://www.pingmylinks.com/addurl/socialsubmission': PingMyLinksAdapter,
-    'https://www.pingmylinks.com/addurl/searchsubmission': PingMyLinksAdapter,
-    '../controllers/search/secretSearchEngineLabsController.js': SecretSearchEngineLabsAdapter,
-    '../controllers/search/activeSearchResultsController.js': ActiveSearchResultsAdapter,
-    '../controllers/redditController.js': RedditAdapter,
-    '../controllers/social_media/twitterController.js': TwitterAdapter,
-    '../controllers/social_media/facebookController.js': FacebookAdapter,
-    '../controllers/social_media/instagramController.js': InstagramAdapter,
+// --- Clean Adapter Maps ---
+// Priority 1: Domain-specific adapters (highest priority)
+const domainAdapterMap = {
+    // Social Media
+    'reddit.com': RedditAdapter,
+    'twitter.com': TwitterAdapter,
+    'facebook.com': FacebookAdapter,
+    'instagram.com': InstagramAdapter,
     'plurk.com': PlurkAdapter,
-    'social_media': PlurkAdapter,
-    '../controllers/bookmarking/bookmarkZooController.js': BookmarkZooAdapter,
-    '../controllers/bookmarking/teslaBookmarksController.js': TeslaPearlBookmarkingAdapter,
-    'directory/gainweb': GainWebAdapter,
-    'directory/socialsubmissionengine': SocialSubmissionEngineAdapter,
-    'directory': GainWebAdapter,
-    'bookmarking/ubookmarking': UBookmarkingAdapter,
-    'bookmarking': GenericBookmarking33Adapter,
-    'bookmarkdrive.com': GenericBookmarking33Adapter,
-    'devto': DevToAdapter,
-    'blog/devto': DevToAdapter,
-    'hashnode': HashnodeAdapter,
-    'blog/hashnode': HashnodeAdapter,
     'tumblr.com': TumblrAdapter,
-    'blog/tumblr': TumblrAdapter,
-    '../controllers/forum/delphiController.js': DelphiForumAdapter,
-    '../controllers/forum/cityDataController.js': CityDataForumAdapter,
-    'forum/delphi': DelphiForumAdapter,
-    'forum/citydata': CityDataForumAdapter,
+
+    // Article/Paste Sites
+    'pastebin.com': PastebinAdapter,
+    'dpaste.org': DPasteAdapter,
+    'jumparticles.com': JumpArticlesAdapter,
+    'articlebiz.com': ArticleBizAdapter,
+    'cl1p.net': Cl1pAdapter,
+    'controlc.com': ControlCAdapter,
+    'jumparticles.com': JumpArticlesAdapter,
+
+    // Blogs
+    'dev.to': DevToAdapter,
+    'hashnode.com': HashnodeAdapter,
+
+    // Forums
     'delphiforums.com': DelphiForumAdapter,
     'city-data.com': CityDataForumAdapter,
-    'ping/ping.in': PingInAdapter,
-    'ping': PingInAdapter,
-    'https://ping.in': PingInAdapter,
-    'ping.in': PingInAdapter,
-    'ping/prepostseo.com': PrePostSEOPingAdapter,
-    'https://www.prepostseo.com': PrePostSEOPingAdapter,
-    'https://www.prepostseo.com/ping-multiple-urls-online': PrePostSEOPingAdapter,
-    'prepostseo.com': PrePostSEOPingAdapter,
-    'ping/backlinkping.com': BacklinkPingAdapter,
-    'https://www.backlinkping.com/online-ping-website-tool': BacklinkPingAdapter,
-    'https://www.backlinkping.com': BacklinkPingAdapter,
-    'backlinkping.com': BacklinkPingAdapter,
-    'ping/excitesubmit.com': ExciteSubmitAdapter,
-    'https://excitesubmit.com': ExciteSubmitAdapter,
-    'excitesubmit.com': ExciteSubmitAdapter,
-    'forum/openpathshala.com': OpenPathshalaForumAdapter,
     'openpathshala.com': OpenPathshalaForumAdapter,
-    'forum/boards.ie': BoardsIEForumAdapter,
     'boards.ie': BoardsIEForumAdapter,
-    'classified/indiabook.com': IndiabookClassifiedAdapter,
-    'https://www.indiabook.com/cgi-bin/classifieds': IndiabookClassifiedAdapter,
-    'classified/oclicker.com': OClickerClassifiedAdapter,
-    'https://oclicker.com': OClickerClassifiedAdapter,
-    'https://dpaste.org': DPasteAdapter,
-    'dpaste.org': DPasteAdapter,
-    'https://pastebin.com': PastebinAdapter,
-    'pastebin.com': PastebinAdapter,
-    'article/dpaste': DPasteAdapter,
-    'article/pastebin': PastebinAdapter,
-    'article': Cl1pAdapter
+
+    // Ping Services
+    'ping.in': PingInAdapter,
+    'prepostseo.com': PrePostSEOPingAdapter,
+    'backlinkping.com': BacklinkPingAdapter,
+    'excitesubmit.com': ExciteSubmitAdapter,
+    'pingmylinks.com': PingMyLinksAdapter,
+
+    // Bookmarking
+    'bookmarkzoo.win': BookmarkZooAdapter,
+    'teslabookmarks.com': TeslaPearlBookmarkingAdapter,
+    'pearlbookmarking.com': TeslaPearlBookmarkingAdapter,
+    'bookmarkdrive.com': GenericBookmarking33Adapter,
+    'ubookmarking.com': UBookmarkingAdapter,
+
+    // Classified
+    'indiabook.com': IndiabookClassifiedAdapter,
+    'oclicker.com': OClickerClassifiedAdapter,
+
+    // Search/Directory
+    'secretsearchenginelabs.com': SecretSearchEngineLabsAdapter,
+    'activesearchresults.com': ActiveSearchResultsAdapter,
+    'gainweb.org': GainWebAdapter,
+    'socialsubmissionengine.com': SocialSubmissionEngineAdapter
+};
+
+// Priority 2: Category-based fallbacks (lower priority)
+const categoryAdapterMap = {
+    'article': Cl1pAdapter,
+    'blog': WordPressAdapter,
+    'forum': ForumAdapter,
+    'social_media': PlurkAdapter,
+    'ping': PingInAdapter,
+    'bookmarking': GenericBookmarking33Adapter,
+    'directory': GainWebAdapter,
+    'classified': IndiabookClassifiedAdapter,
+    'search': ActiveSearchResultsAdapter
 };
 
 export const getAdapter = (jobDetails) => {
-console.log('jobDetails', jobDetails);
+    const website = jobDetails.website;
 
-    const controllerPath = getControllerForWebsite(jobDetails.website);
-    console.log(`[getAdapter] controllerPath: ${controllerPath}`);
-    console.log(`[getAdapter] jobDetails.website.category: ${jobDetails.website.category}`);
-    console.log(`[getAdapter] jobDetails.website.url: ${jobDetails.website.url}`);
+    console.log(`\n🔍 ADAPTER SELECTION | ${website.url} | Category: ${website.category || 'none'}`);
 
-    if (controllerPath && adapterMap[controllerPath]) {
-        const AdapterClass = adapterMap[controllerPath];
-        return new AdapterClass(jobDetails);
-    }
-
-    // NEW: Try matching by full URL
-    if (jobDetails.website.url && adapterMap[jobDetails.website.url]) {
-        const AdapterClass = adapterMap[jobDetails.website.url];
-        return new AdapterClass(jobDetails);
-    }
-
-    // Fallback: try matching by domain (hostname)
+    // Priority 1: Domain-specific adapter (highest priority)
     try {
-        const urlObj = new URL(jobDetails.website.url);
-        const hostname = urlObj.hostname;
-        if (adapterMap[hostname]) {
-            const AdapterClass = adapterMap[hostname];
+        const urlObj = new URL(website.url);
+        const hostname = urlObj.hostname.replace('www.', '');
+
+        if (domainAdapterMap[hostname]) {
+            const AdapterClass = domainAdapterMap[hostname];
+            console.log(`✅ SELECTED: ${AdapterClass.name} (domain-specific for ${hostname})`);
             return new AdapterClass(jobDetails);
         }
+
+        console.log(`⚠️  No domain adapter for ${hostname}, checking category fallback...`);
     } catch (e) {
-        // ignore URL parse errors
+        console.log(`❌ URL parsing failed: ${e.message}`);
     }
 
-    // Fallback: try matching by category (as a last resort)
-    if (jobDetails.website.category && adapterMap[jobDetails.website.category]) {
-        const AdapterClass = adapterMap[jobDetails.website.category];
+    // Priority 2: Category-based fallback
+    if (website.category && categoryAdapterMap[website.category]) {
+        const AdapterClass = categoryAdapterMap[website.category];
+        console.log(`✅ SELECTED: ${AdapterClass.name} (category fallback for '${website.category}')`);
         return new AdapterClass(jobDetails);
     }
 
+    console.log(`🚫 NO ADAPTER FOUND | No domain or category match available\n`);
     return null;
 };
 

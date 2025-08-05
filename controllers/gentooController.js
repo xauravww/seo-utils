@@ -89,9 +89,7 @@ export const postToGentooForums = async (req, res) => {
         res.status(200).json({ success: true, message: 'Post created successfully on Gentoo Forums.', finalUrl });
 
     } catch (error) {
-        console.error('\n--- [SCRIPT ERROR] ---');
-        console.error('[ERROR] Gentoo script error:', error.message);
-        console.error('----------------------');
+        console.error('Gentoo script error:', error.message);
         if (browser) {
             // await browser.close(); // Do not close browser on error either, to allow for debugging.
         }

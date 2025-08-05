@@ -1,5 +1,5 @@
 class CloudflareBypasser {
-    constructor(page, maxRetries = 5, log = true) {
+    constructor(page, maxRetries = 5, log = false) {
         this.page = page;
         this.maxRetries = maxRetries;
         this.log = log;

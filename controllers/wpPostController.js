@@ -89,13 +89,10 @@ const postWithAxios = async (newPostUrl, cookies, hiddenInputs, title, content, 
 };
 
 export const createPost = (req, res) => {
-  console.log("req.body in createPost ",req.body)
     const { title, content, username, password, urls } = req.body;
     const requestId = crypto.randomUUID();
-    console.log(`[${requestId}] Received request to create post. URLs:`, urls);
   
     if (!title || !content || !username || !password || !urls || !Array.isArray(urls) || urls.length === 0) {
-      console.error(`[${requestId}] Bad request: Missing required fields.`);
       return res.status(400).json({ error: 'Missing required fields. Make sure to provide title, content, username, password, and a non-empty array of urls.' });
     }
   

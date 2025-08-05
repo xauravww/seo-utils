@@ -112,15 +112,12 @@ class GainWebAdapter extends BaseAdapter {
 
         } catch (error) {
             this.log(`[ERROR] GainWebAdapter error: ${error.message}`, 'error', true);
-            console.error(`[${this.requestId}] [GainWebAdapter] Error: ${error.message}`);
 
             if (page) {
                 const errorScreenshotPath = `${this.requestId}-error-screenshot.png`;
                 await page.screenshot({ path: errorScreenshotPath, fullPage: true });
-                this.log(`[EVENT] Error screenshot taken: ${errorScreenshotPath}`, 'info', true);
                 const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
-                this.log(`[EVENT] Error screenshot uploaded to Cloudinary: ${errorCloudinaryResult.secure_url}`, 'info', true);
-                console.log(`[${this.requestId}] [GainWebAdapter] Error screenshot URL: ${errorCloudinaryResult.secure_url}`);
+                this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
                 fs.unlinkSync(errorScreenshotPath);
             }
 

@@ -4,27 +4,9 @@ import { getSession, setSession } from '../sessionStore.js';
 
 // --- LinkedIn API Functions (update to latest endpoints if available) ---
 
-// Helper to create a log of the request to LinkedIn
-const logApiRequest = (method, url, data = null) => {
-  console.log(`\n---\nDEBUG: Sending ${method} request to LinkedIn.`);
-  console.log(`  URL: ${url}`);
-  if (data) {
-    console.log(`  Payload: ${JSON.stringify(data, null, 2)}`);
-  }
-  console.log('---\n');
-};
-
 // Helper to log the full error from LinkedIn
 const logApiError = (context, error) => {
-  console.error(`\n---\nERROR: LinkedIn API request failed in ${context}.`);
-  if (error.response) {
-    console.error(`  Status: ${error.response.status} - ${error.response.statusText}`);
-    console.error(`  Headers: ${JSON.stringify(error.response.headers, null, 2)}`);
-    console.error(`  Data: ${JSON.stringify(error.response.data, null, 2)}`);
-  } else {
-    console.error(`  Message: ${error.message}`);
-  }
-  console.error('---\n');
+  console.error(`LinkedIn API error in ${context}: ${error.message}`);
 };
 
 async function getUserInfo(accessToken) {
@@ -225,15 +207,12 @@ const handleCallback = async (req, res) => {
 };
 
 const handleCreatePost = async (req, res) => {
-  console.log('INFO: handleCreatePost triggered.');
   try {
     const sessionId = req.headers['x-session-id'];
     const { text, article } = req.body;
-    console.log(`DEBUG: Received data for new post: sessionId=${sessionId}, text=${text ? `"${text.substring(0, 20)}..."` : 'null'}, article=${article ? JSON.stringify(article) : 'null'}`);
     const session = getSession(sessionId);
-    
+
     if (!session) {
-      console.warn(`WARN: Invalid session ID provided: ${sessionId}`);
       return res.status(401).json({ error: 'Invalid or missing session ID. Please authenticate again via /auth.' });
     }
 

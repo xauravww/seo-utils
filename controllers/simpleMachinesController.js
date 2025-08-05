@@ -133,14 +133,11 @@ export const postToSimpleMachines = async (req, res) => {
         const topicLinkLocator = page.locator(`.windowbg .message_index_title a[href*="topic=${subject.replace(/ /g, '.')}"]`).first();
         const finalUrl = await topicLinkLocator.getAttribute('href');
         
-        console.log('[SUCCESS] Post created successfully. Final URL:', finalUrl);
         await browser.close();
         res.status(200).json({ success: true, message: 'Post created successfully.', finalUrl });
 
     } catch (error) {
-        console.error('\n--- [SCRIPT ERROR] ---');
-        console.error('[ERROR] Global script error:', error.message);
-        console.error('----------------------');
+        console.error('SimpleMachines script error:', error.message);
         if (browser) await browser.close();
         res.status(500).json({ success: false, message: 'An error occurred.', error: error.message });
     }

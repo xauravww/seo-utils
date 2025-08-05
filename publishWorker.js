@@ -182,10 +182,10 @@ function publishLog(requestId, message, level = 'info') {
 }
 
 connection.on('error', (err) => {
-  console.error('[publishWorker.js][REDIS ERROR][connection]', err);
+  console.error('Redis connection error:', err.message);
 });
 redisPublisher.on('error', (err) => {
-  console.error('[publishWorker.js][REDIS ERROR][redisPublisher]', err);
+  console.error('Redis publisher error:', err.message);
 });
 
 // Helper function to safely parse database log data
@@ -685,7 +685,7 @@ const startAllCategoryWorkers = () => {
             }
           } catch (error) {
             // Handle unexpected errors - still push logs to Redis
-            console.error(`[BullMQ] [${category}] Unexpected error in job ${job.id}:`, error);
+            console.error(`Job ${job.id} error: ${error.message}`);
             await job.log(`[ERROR] Unexpected error: ${error.message}`);
 
             // Push error log to Redis for campaign tracking

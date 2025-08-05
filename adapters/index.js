@@ -29,6 +29,8 @@ import TumblrAdapter from './blog/TumblrAdapter.js';
 import PrePostSEOPingAdapter from './ping/PrePostSEOPingAdapter.js'
 import BacklinkPingAdapter from './ping/BacklinkPingAdapter.js'
 import ExciteSubmitAdapter from './ping/ExciteSubmitAdapter.js'
+import JumpArticlesAdapter from './article/JumpArticlesAdapter.js'
+import ArticleBizAdapter from './article/ArticleBizAdapter.js'
 
 export {
   WordPressAdapter,
@@ -61,5 +63,7 @@ export {
   PastebinAdapter,
   DPasteAdapter,
   ControlCAdapter,
-  Cl1pAdapter
+  Cl1pAdapter,
+  JumpArticlesAdapter,
+  ArticleBizAdapter
 };

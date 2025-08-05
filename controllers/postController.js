@@ -61,8 +61,6 @@ const postWithAxios = async (newPostUrl, cookies, hiddenInputs, title, content) 
     },
   });
 
-  console.log(postRes.data)
-
   // Extract post URL from response
   const $ = load(postRes.data);
   let finalUrl = $('#successfully_posted_url a').attr('href');
@@ -70,7 +68,6 @@ const postWithAxios = async (newPostUrl, cookies, hiddenInputs, title, content) 
     finalUrl = $('#published-url a').attr('href');
   }
 
-  console.log(finalUrl ? `✅ Post URL: ${finalUrl}` : `❌ Post URL not found on ${newPostUrl}.`);
   return finalUrl;
 };
 

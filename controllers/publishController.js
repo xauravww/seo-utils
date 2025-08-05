@@ -86,16 +86,12 @@ async function processPublishJob(reqBody, requestId) {
     }
     try {
       parsedContent = JSON.parse(cleanedContent);
-      console.log(`[${requestId}] Content parsed as JSON.`);
     } catch (e) {
       websocketLogger.log(requestId, `❌ Error parsing content JSON: ${e.message}`, 'error');
-      console.error(`[${requestId}] Error parsing content JSON: ${e.message}`);
       parsedContent = { markdown: content, html: content };
-      console.log(`[${requestId}] Content treated as plain text.`);
     }
   } else if (content && typeof content === 'object') {
     parsedContent = content;
-    console.log(`[${requestId}] Content already an object.`);
   }
   let campaign_category = category || (info && info.category);
   // Ensure sitesDetails is always an array before using .find
@@ -115,11 +111,9 @@ async function processPublishJob(reqBody, requestId) {
     websocketLogger.log(requestId, `[Config] Minimum include not specified for category "${campaign_category}". Will attempt to use all matching websites.`, 'warning');
     console.log(`[${requestId}] Minimum include not specified. Using all matching websites.`);
   }
-  console.log(`[${requestId}] Step 3: Filtering websites by category "${campaign_category}" and is_verified.`);
   if (info && info.websites && Array.isArray(info.websites)) {
     availableWebsites = info.websites.filter(site => site.category === campaign_category && site.is_verified);
     websocketLogger.log(requestId, `[Filtering] Found ${availableWebsites.length} verified websites matching category "${campaign_category}".`, 'info');
-    console.log(`[${requestId}] Available verified websites after category filter: ${availableWebsites.length}`);
   } else {
     websocketLogger.log(requestId, `[Filtering] No websites found in info.websites or info.websites is not an array.`, 'warning');
     console.error(`[${requestId}] No websites found in info.websites or info.websites is not an array.`);
@@ -181,9 +175,14 @@ async function processPublishJob(reqBody, requestId) {
     description: parsedContent.description || parsedContent.markdown || parsedContent.html || '',
     markdown: parsedContent.markdown || '',
     html: parsedContent.html || '',
-    body: parsedContent.markdown || parsedContent.html || ''
+    body: parsedContent.markdown || parsedContent.html || '',
+    // Add user information for adapters that need it
+    email: (info && info.user && info.user.public_email_address) || (info && info.user_email) || '',
+    authorName: (info && info.user_name) || '',
+    category: campaign_category || '',
+    info: info // Include full info object for adapters that need more user details
   };
-  console.log(`[${requestId}] Worker Content: ${JSON.stringify(workerContent)}`);
+  // console.log(`[${requestId}] Worker Content: ${JSON.stringify(workerContent)}`);
   // Instead of spawning a worker, just return the job data (actual processing will be done by BullMQ worker)
   return {
     requestId,
