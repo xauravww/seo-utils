@@ -31,6 +31,8 @@ import BacklinkPingAdapter from './ping/BacklinkPingAdapter.js'
 import ExciteSubmitAdapter from './ping/ExciteSubmitAdapter.js'
 import JumpArticlesAdapter from './article/JumpArticlesAdapter.js'
 import ArticleBizAdapter from './article/ArticleBizAdapter.js'
+import ArticleAlleyAdapter from './article/ArticleAlleyAdapter.js'
+import KugliAdapter from './classified/KugliAdapter.js'
 
 export {
   WordPressAdapter,
@@ -65,5 +67,7 @@ export {
   ControlCAdapter,
   Cl1pAdapter,
   JumpArticlesAdapter,
-  ArticleBizAdapter
+  ArticleBizAdapter,
+  ArticleAlleyAdapter,
+  KugliAdapter
 };

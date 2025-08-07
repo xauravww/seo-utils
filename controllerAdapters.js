@@ -54,7 +54,9 @@ import {
   Cl1pAdapter,
   ControlCAdapter,
   JumpArticlesAdapter,
-  ArticleBizAdapter
+  ArticleBizAdapter,
+  ArticleAlleyAdapter,
+  KugliAdapter
 } from './adapters/index.js';
 import BaseAdapter from './adapters/BaseAdapter.js';
 
@@ -105,6 +107,7 @@ const domainAdapterMap = {
     'dpaste.org': DPasteAdapter,
     'jumparticles.com': JumpArticlesAdapter,
     'articlebiz.com': ArticleBizAdapter,
+    'articlealley.com': ArticleAlleyAdapter,
     'cl1p.net': Cl1pAdapter,
     'controlc.com': ControlCAdapter,
     'jumparticles.com': JumpArticlesAdapter,
@@ -136,6 +139,7 @@ const domainAdapterMap = {
     // Classified
     'indiabook.com': IndiabookClassifiedAdapter,
     'oclicker.com': OClickerClassifiedAdapter,
+    'kugli.com': KugliAdapter,
 
     // Search/Directory
     'secretsearchenginelabs.com': SecretSearchEngineLabsAdapter,
