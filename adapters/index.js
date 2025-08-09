@@ -35,6 +35,8 @@ import ExciteSubmitAdapter from './ping/ExciteSubmitAdapter.js'
 import JumpArticlesAdapter from './article/JumpArticlesAdapter.js'
 import ArticleBizAdapter from './article/ArticleBizAdapter.js'
 import ArticleAlleyAdapter from './article/ArticleAlleyAdapter.js'
+import WriteAsAdapter from './article/WriteAsAdapter.js'
+import TelegraphAdapter from './article/TelegraphAdapter.js'
 import KugliAdapter from './classified/KugliAdapter.js'
 
 export {
@@ -56,7 +58,7 @@ export {
   BookmarkZooAdapter,
   TeslaPearlBookmarkingAdapter,
   DiigoAdapter,
-  DiigoBookmarkingAdapter, 
+  DiigoBookmarkingAdapter,
   IndiabookClassifiedAdapter,
   OClickerClassifiedAdapter,
   GainWebAdapter,
@@ -74,6 +76,8 @@ export {
   JumpArticlesAdapter,
   ArticleBizAdapter,
   ArticleAlleyAdapter,
+  WriteAsAdapter,
+  TelegraphAdapter,
   KugliAdapter,
   DiigoForumsAdapter
 };

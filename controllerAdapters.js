@@ -56,7 +56,9 @@ import {
   ArticleBizAdapter,
   ArticleAlleyAdapter,
   KugliAdapter,
-  DiigoForumsAdapter
+  DiigoForumsAdapter,
+  WriteAsAdapter,
+  TelegraphAdapter
 } from './adapters/index.js';
 import BaseAdapter from './adapters/BaseAdapter.js';
 
@@ -111,6 +113,8 @@ const domainAdapterMap = {
   'cl1p.net': Cl1pAdapter,
   'controlc.com': ControlCAdapter,
   'jumparticles.com': JumpArticlesAdapter,
+  'write.as':WriteAsAdapter,
+  'telegra.ph':TelegraphAdapter,
 
   // Blogs
   'dev.to': DevToAdapter,
