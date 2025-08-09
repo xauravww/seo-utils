@@ -15,6 +15,9 @@ import SecretSearchEngineLabsAdapter from './search/SecretSearchEngineLabsAdapte
 import ActiveSearchResultsAdapter from './search/ActiveSearchResultsAdapter.js';
 import BookmarkZooAdapter from './bookmarking/BookmarkZooAdapter.js';
 import TeslaPearlBookmarkingAdapter from './bookmarking/TeslaPearlBookmarkingAdapter.js';
+import DiigoAdapter from './bookmarking/DiigoAdapter.js';
+import DiigoBookmarkingAdapter from './bookmarking/DiigoBookmarkingAdapter.js';
+import DiigoForumsAdapter from './forum/DiigoForumAdapter.js';
 import IndiabookClassifiedAdapter from './classified/IndiabookClassifiedAdapter.js';
 import OClickerClassifiedAdapter from './classified/OClickerClassifiedAdapter.js';
 import GainWebAdapter from './directory/GainWebAdapter.js';
@@ -52,6 +55,8 @@ export {
   ActiveSearchResultsAdapter,
   BookmarkZooAdapter,
   TeslaPearlBookmarkingAdapter,
+  DiigoAdapter,
+  DiigoBookmarkingAdapter, 
   IndiabookClassifiedAdapter,
   OClickerClassifiedAdapter,
   GainWebAdapter,
@@ -69,5 +74,6 @@ export {
   JumpArticlesAdapter,
   ArticleBizAdapter,
   ArticleAlleyAdapter,
-  KugliAdapter
+  KugliAdapter,
+  DiigoForumsAdapter
 };

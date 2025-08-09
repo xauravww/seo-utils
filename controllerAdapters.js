@@ -15,8 +15,6 @@ import fs from 'fs';
 
 import { getRedditAccessToken, submitRedditPost } from './controllers/redditController.js';
 import { sendTweet } from './controllers/social_media/twitterController.js';
-import { postToFacebook } from './controllers/social_media/facebookController.js';
-import { postToInstagram } from './controllers/social_media/instagramController.js';
 import { UBookmarkingAdapter } from './controllers/bookmarking/ubookmarkingController.js';
 import GenericBookmarking33Adapter from './adapters/bookmarking/GenericBookmarking33.js';
 import { OAuth } from 'oauth';
@@ -41,6 +39,7 @@ import {
   ActiveSearchResultsAdapter,
   BookmarkZooAdapter,
   TeslaPearlBookmarkingAdapter,
+  DiigoBookmarkingAdapter,
   IndiabookClassifiedAdapter,
   OClickerClassifiedAdapter,
   GainWebAdapter,
@@ -48,7 +47,7 @@ import {
   DevToAdapter,
   HashnodeAdapter,
   PlurkAdapter,
-  TumblrAdapter,PrePostSEOPingAdapter,BacklinkPingAdapter,ExciteSubmitAdapter,
+  TumblrAdapter, PrePostSEOPingAdapter, BacklinkPingAdapter, ExciteSubmitAdapter,
   DPasteAdapter,
   PastebinAdapter,
   Cl1pAdapter,
@@ -56,7 +55,8 @@ import {
   JumpArticlesAdapter,
   ArticleBizAdapter,
   ArticleAlleyAdapter,
-  KugliAdapter
+  KugliAdapter,
+  DiigoForumsAdapter
 } from './adapters/index.js';
 import BaseAdapter from './adapters/BaseAdapter.js';
 
@@ -65,9 +65,9 @@ const __dirname = dirname(__filename);
 
 // Configure Cloudinary
 cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 const redisProtocol = process.env.REDIS_PROTOCOL || 'redis://';
@@ -87,110 +87,112 @@ redisPublisher.on('error', (err) => {
 await redisPublisher.connect();
 
 function publishLog(requestId, message, level = 'info') {
-    const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
-    redisPublisher.publish(`logs:${requestId}`, payload);
+  const payload = JSON.stringify({ message, level, timestamp: new Date().toISOString() });
+  redisPublisher.publish(`logs:${requestId}`, payload);
 }
 
 // --- Clean Adapter Maps ---
 // Priority 1: Domain-specific adapters (highest priority)
 const domainAdapterMap = {
-    // Social Media
-    'reddit.com': RedditAdapter,
-    'twitter.com': TwitterAdapter,
-    'facebook.com': FacebookAdapter,
-    'instagram.com': InstagramAdapter,
-    'plurk.com': PlurkAdapter,
-    'tumblr.com': TumblrAdapter,
+  // Social Media
+  'reddit.com': RedditAdapter,
+  'twitter.com': TwitterAdapter,
+  'facebook.com': FacebookAdapter,
+  'instagram.com': InstagramAdapter,
+  'plurk.com': PlurkAdapter,
+  'tumblr.com': TumblrAdapter,
 
-    // Article/Paste Sites
-    'pastebin.com': PastebinAdapter,
-    'dpaste.org': DPasteAdapter,
-    'jumparticles.com': JumpArticlesAdapter,
-    'articlebiz.com': ArticleBizAdapter,
-    'articlealley.com': ArticleAlleyAdapter,
-    'cl1p.net': Cl1pAdapter,
-    'controlc.com': ControlCAdapter,
-    'jumparticles.com': JumpArticlesAdapter,
+  // Article/Paste Sites
+  'pastebin.com': PastebinAdapter,
+  'dpaste.org': DPasteAdapter,
+  'jumparticles.com': JumpArticlesAdapter,
+  'articlebiz.com': ArticleBizAdapter,
+  'articlealley.com': ArticleAlleyAdapter,
+  'cl1p.net': Cl1pAdapter,
+  'controlc.com': ControlCAdapter,
+  'jumparticles.com': JumpArticlesAdapter,
 
-    // Blogs
-    'dev.to': DevToAdapter,
-    'hashnode.com': HashnodeAdapter,
+  // Blogs
+  'dev.to': DevToAdapter,
+  'hashnode.com': HashnodeAdapter,
 
-    // Forums
-    'delphiforums.com': DelphiForumAdapter,
-    'city-data.com': CityDataForumAdapter,
-    'openpathshala.com': OpenPathshalaForumAdapter,
-    'boards.ie': BoardsIEForumAdapter,
+  // Forums
+  'delphiforums.com': DelphiForumAdapter,
+  'city-data.com': CityDataForumAdapter,
+  'openpathshala.com': OpenPathshalaForumAdapter,
+  'boards.ie': BoardsIEForumAdapter,
+  'groups.diigo.com': DiigoForumsAdapter,
 
-    // Ping Services
-    'ping.in': PingInAdapter,
-    'prepostseo.com': PrePostSEOPingAdapter,
-    'backlinkping.com': BacklinkPingAdapter,
-    'excitesubmit.com': ExciteSubmitAdapter,
-    'pingmylinks.com': PingMyLinksAdapter,
+  // Ping Services
+  'ping.in': PingInAdapter,
+  'prepostseo.com': PrePostSEOPingAdapter,
+  'backlinkping.com': BacklinkPingAdapter,
+  'excitesubmit.com': ExciteSubmitAdapter,
+  'pingmylinks.com': PingMyLinksAdapter,
 
-    // Bookmarking
-    'bookmarkzoo.win': BookmarkZooAdapter,
-    'teslabookmarks.com': TeslaPearlBookmarkingAdapter,
-    'pearlbookmarking.com': TeslaPearlBookmarkingAdapter,
-    'bookmarkdrive.com': GenericBookmarking33Adapter,
-    'ubookmarking.com': UBookmarkingAdapter,
+  // Bookmarking
+  'bookmarkzoo.win': BookmarkZooAdapter,
+  'teslabookmarks.com': TeslaPearlBookmarkingAdapter,
+  'pearlbookmarking.com': TeslaPearlBookmarkingAdapter,
+  'diigo.com': DiigoBookmarkingAdapter,
+  'bookmarkdrive.com': GenericBookmarking33Adapter,
+  'ubookmarking.com': UBookmarkingAdapter,
 
-    // Classified
-    'indiabook.com': IndiabookClassifiedAdapter,
-    'oclicker.com': OClickerClassifiedAdapter,
-    'kugli.com': KugliAdapter,
+  // Classified
+  'indiabook.com': IndiabookClassifiedAdapter,
+  'oclicker.com': OClickerClassifiedAdapter,
+  'kugli.com': KugliAdapter,
 
-    // Search/Directory
-    'secretsearchenginelabs.com': SecretSearchEngineLabsAdapter,
-    'activesearchresults.com': ActiveSearchResultsAdapter,
-    'gainweb.org': GainWebAdapter,
-    'socialsubmissionengine.com': SocialSubmissionEngineAdapter
+  // Search/Directory
+  'secretsearchenginelabs.com': SecretSearchEngineLabsAdapter,
+  'activesearchresults.com': ActiveSearchResultsAdapter,
+  'gainweb.org': GainWebAdapter,
+  'socialsubmissionengine.com': SocialSubmissionEngineAdapter
 };
 
 // Priority 2: Category-based fallbacks (lower priority)
 const categoryAdapterMap = {
-    'article': Cl1pAdapter,
-    'blog': WordPressAdapter,
-    'forum': ForumAdapter,
-    'social_media': PlurkAdapter,
-    'ping': PingInAdapter,
-    'bookmarking': GenericBookmarking33Adapter,
-    'directory': GainWebAdapter,
-    'classified': IndiabookClassifiedAdapter,
-    'search': ActiveSearchResultsAdapter
+  'article': Cl1pAdapter,
+  'blog': WordPressAdapter,
+  'forum': DelphiForumAdapter, // Use DelphiForumAdapter as generic forum fallback
+  'social_media': PlurkAdapter,
+  'ping': PingInAdapter,
+  'bookmarking': GenericBookmarking33Adapter,
+  'directory': GainWebAdapter,
+  'classified': IndiabookClassifiedAdapter,
+  'search': ActiveSearchResultsAdapter
 };
 
 export const getAdapter = (jobDetails) => {
-    const website = jobDetails.website;
+  const website = jobDetails.website;
 
-    console.log(`\n🔍 ADAPTER SELECTION | ${website.url} | Category: ${website.category || 'none'}`);
+  console.log(`\n🔍 ADAPTER SELECTION | ${website.url} | Category: ${website.category || 'none'}`);
 
-    // Priority 1: Domain-specific adapter (highest priority)
-    try {
-        const urlObj = new URL(website.url);
-        const hostname = urlObj.hostname.replace('www.', '');
+  // Priority 1: Domain-specific adapter (highest priority)
+  try {
+    const urlObj = new URL(website.url);
+    const hostname = urlObj.hostname.replace('www.', '');
 
-        if (domainAdapterMap[hostname]) {
-            const AdapterClass = domainAdapterMap[hostname];
-            console.log(`✅ SELECTED: ${AdapterClass.name} (domain-specific for ${hostname})`);
-            return new AdapterClass(jobDetails);
-        }
-
-        console.log(`⚠️  No domain adapter for ${hostname}, checking category fallback...`);
-    } catch (e) {
-        console.log(`❌ URL parsing failed: ${e.message}`);
+    if (domainAdapterMap[hostname]) {
+      const AdapterClass = domainAdapterMap[hostname];
+      console.log(`✅ SELECTED: ${AdapterClass.name} (domain-specific for ${hostname})`);
+      return new AdapterClass(jobDetails);
     }
 
-    // Priority 2: Category-based fallback
-    if (website.category && categoryAdapterMap[website.category]) {
-        const AdapterClass = categoryAdapterMap[website.category];
-        console.log(`✅ SELECTED: ${AdapterClass.name} (category fallback for '${website.category}')`);
-        return new AdapterClass(jobDetails);
-    }
+    console.log(`⚠️  No domain adapter for ${hostname}, checking category fallback...`);
+  } catch (e) {
+    console.log(`❌ URL parsing failed: ${e.message}`);
+  }
 
-    console.log(`🚫 NO ADAPTER FOUND | No domain or category match available\n`);
-    return null;
+  // Priority 2: Category-based fallback
+  if (website.category && categoryAdapterMap[website.category]) {
+    const AdapterClass = categoryAdapterMap[website.category];
+    console.log(`✅ SELECTED: ${AdapterClass.name} (category fallback for '${website.category}')`);
+    return new AdapterClass(jobDetails);
+  }
+
+  console.log(`🚫 NO ADAPTER FOUND | No domain or category match available\n`);
+  return null;
 };
 
 // --- Adapter Factory ---
