@@ -162,7 +162,7 @@ class DiigoForumsAdapter extends BaseAdapter {
                     // Look for patterns like "1. Technology", "2. News", "1Technology2News3Business"
                     const numberedMatches = rawContent.match(/\d+\.?\s*([A-Za-z]+)/g);
                     if (numberedMatches && numberedMatches.length > 0) {
-                        categories = numberedMatches.map(match => 
+                        categories = numberedMatches.map(match =>
                             match.replace(/^\d+\.?\s*/, '').trim()
                         ).filter(cat => cat.length > 0);
                         console.log("Found numbered categories:", categories);
@@ -387,7 +387,7 @@ class DiigoForumsAdapter extends BaseAdapter {
             await page.goto(this.loginUrl, { waitUntil: 'domcontentloaded' });
             this.log('[EVENT] Navigation to login page complete.', 'detail', false);
 
-            // Fill login form
+            // Fill login form - SIMPLE LOGIN (forums rarely have captchas)
             this.log('[EVENT] Filling login form...', 'detail', false);
 
             // Extract credentials with proper error handling
@@ -402,69 +402,21 @@ class DiigoForumsAdapter extends BaseAdapter {
 
             await page.locator('input[name="Username"]').fill(username);
             await page.locator('input[name="password"]').fill(password);
-            
-            this.log('[EVENT] Login form filled. Waiting for CAPTCHA completion...', 'detail', false);
-            
-            // Handle CAPTCHA completion with retry logic
-            let loginSuccessful = false;
-            let loginAttempts = 0;
-            const maxLoginAttempts = 5;
-            
-            while (!loginSuccessful && loginAttempts < maxLoginAttempts) {
-                loginAttempts++;
-                this.log(`[EVENT] Login attempt ${loginAttempts}/${maxLoginAttempts}`, 'detail', false);
-                
-                try {
-                    // Check if login button is still visible (indicates CAPTCHA not completed)
-                    const loginButton = page.locator('button#loginButton');
-                    const isLoginButtonVisible = await loginButton.isVisible({ timeout: 5000 });
-                    
-                    if (isLoginButtonVisible) {
-                        this.log('[EVENT] Login button still visible - CAPTCHA may need completion', 'detail', false);
-                        
-                        // Wait a bit longer for CAPTCHA completion
-                        await page.waitForTimeout(10000);
-                        
-                        // Check if we can click the login button again
-                        try {
-                            await loginButton.click();
-                            this.log('[EVENT] Clicked login button again', 'detail', false);
-                        } catch (clickError) {
-                            this.log('[DEBUG] Could not click login button, may be disabled', 'detail', false);
-                        }
-                    }
-                    
-                    // Check for successful login indicators
-                    try {
-                        await page.waitForURL('**/my/**', { timeout: 15000 });
-                        loginSuccessful = true;
-                        break;
-                    } catch (urlError) {
-                        // Continue to next attempt
-                        this.log('[DEBUG] Still on login page, waiting for CAPTCHA completion', 'detail', false);
-                        await page.waitForTimeout(5000);
-                    }
-                    
-                    // Also check for dashboard elements
-                    try {
-                        await page.waitForSelector('div.addItemButton.blue', { state: 'visible', timeout: 10000 });
-                        loginSuccessful = true;
-                        break;
-                    } catch (dashboardError) {
-                        // Continue waiting
-                    }
-                    
-                } catch (error) {
-                    this.log(`[DEBUG] Login attempt ${loginAttempts} failed: ${error.message}`, 'detail', false);
-                    await page.waitForTimeout(5000);
-                }
-            }
-            
-            if (!loginSuccessful) {
-                throw new Error('Failed to complete login after CAPTCHA completion');
-            }
 
-            this.log('[EVENT] Login successful after CAPTCHA completion.', 'info', true);
+            // Click login button directly (forums rarely have captchas)
+            this.log('[EVENT] Clicking login button...', 'detail', false);
+            const loginButton = page.locator('button#loginButton');
+            await loginButton.click();
+
+            // Wait for successful login
+            try {
+                await page.waitForURL('**/my/**', { timeout: 15000 });
+                this.log('[EVENT] Login successful - redirected to dashboard.', 'info', true);
+            } catch (urlError) {
+                // Also check for dashboard elements
+                await page.waitForSelector('div.addItemButton.blue', { state: 'visible', timeout: 10000 });
+                this.log('[EVENT] Login successful - dashboard loaded.', 'info', true);
+            }
 
             // Step 3: Get group URLs for the determined categories
             const groupUrls = this.getGroupUrls(categories);
@@ -483,14 +435,14 @@ class DiigoForumsAdapter extends BaseAdapter {
             if (groupNameMatch) {
                 const groupName = groupNameMatch[1];
                 const joinUrl = `https://groups.diigo.com/group_mana/join_group?group_name=${groupName}`;
-                
+
                 this.log(`[EVENT] Joining group directly via: ${joinUrl}`, 'info', true);
                 await page.goto(joinUrl, { waitUntil: 'domcontentloaded' });
                 await page.waitForTimeout(2000);
-                
+
                 this.log('[EVENT] Successfully joined group', 'info', true);
             }
-            
+
             // Step 6: Navigate to the group page
             this.log(`[EVENT] Navigating to group: ${randomGroupUrl}`, 'detail', false);
             await page.goto(randomGroupUrl, { waitUntil: 'domcontentloaded' });
@@ -499,7 +451,7 @@ class DiigoForumsAdapter extends BaseAdapter {
             // Step 6: Wait for page to load completely and check group membership
             this.log('[EVENT] Waiting for page to load completely...', 'detail', false);
             await page.waitForTimeout(5000); // Let the page load fully
-            
+
             this.log('[EVENT] Checking if we need to join this group...', 'detail', false);
 
             try {
@@ -537,21 +489,21 @@ class DiigoForumsAdapter extends BaseAdapter {
                     // Extract group name from current URL or join button href
                     const currentUrl = page.url();
                     const groupNameMatch = currentUrl.match(/\/group\/([^\/]+)/);
-                    
+
                     if (groupNameMatch) {
                         const groupName = groupNameMatch[1];
                         const joinUrl = `https://groups.diigo.com/group_mana/join_group?group_name=${groupName}`;
-                        
+
                         this.log(`[EVENT] Found "Join this group" button - joining directly via: ${joinUrl}`, 'info', true);
                         await page.goto(joinUrl, { waitUntil: 'domcontentloaded' });
-                        
+
                         // Wait a moment for the join to process
                         await page.waitForTimeout(2000);
-                        
+
                         // Navigate back to the group page
                         await page.goto(currentUrl, { waitUntil: 'domcontentloaded' });
                         await page.waitForTimeout(3000);
-                        
+
                         this.log('[EVENT] Successfully joined group and returned to group page', 'info', true);
                     } else {
                         this.log('[EVENT] Could not extract group name from URL, proceeding without joining', 'warning', true);
@@ -565,211 +517,98 @@ class DiigoForumsAdapter extends BaseAdapter {
                 this.log('[EVENT] Could not find join button - we are likely already a member of this group', 'info', true);
             }
 
-            // Step 8: Now we are part of the group, create a bookmark post
-            this.log('[EVENT] Now part of the group, creating bookmark post...', 'info', true);
+            // Step 8: Now we are part of the group, create a topic post
+            this.log('[EVENT] Now part of the group, creating topic post...', 'info', true);
 
-            // Step 8a: Find and click the "Bookmark" link with multiple selectors
-            this.log('[EVENT] Looking for Bookmark link...', 'detail', false);
-            try {
-                // Try multiple possible selectors for the bookmark link
-                const possibleSelectors = [
-                    'a.pLink#post_item_bookmark',
-                    'a#post_item_bookmark',
-                    'a[href*="bookmark"]',
-                    'a:has-text("Bookmark")',
-                    '.pLink:has-text("Bookmark")',
-                    'a.menuItem:has-text("Bookmark")'
-                ];
+            // Step 8a: Navigate directly to new topic creation URL instead of clicking Topic button
+            this.log('[EVENT] Navigating directly to new topic creation URL...', 'detail', false);
 
-                let bookmarkLink = null;
-                let foundSelector = null;
+            // Extract group name from current URL to build the new topic URL
+            const currentUrl = page.url();
+            const topicGroupNameMatch = currentUrl.match(/\/group\/([^\/]+)/);
 
-                for (const selector of possibleSelectors) {
-                    try {
-                        bookmarkLink = page.locator(selector).first();
-                        await bookmarkLink.waitFor({ state: 'visible', timeout: 3000 });
-                        foundSelector = selector;
-                        this.log(`[EVENT] Found Bookmark link with selector: ${selector}`, 'info', true);
-                        break;
-                    } catch (selectorError) {
-                        this.log(`[DEBUG] Selector ${selector} not found, trying next...`, 'detail', false);
-                        continue;
-                    }
-                }
-
-                if (!bookmarkLink || !foundSelector) {
-                    // Take a screenshot to see what's available on the page
-                    const debugScreenshotPath = `screenshot_debug_${this.requestId}.png`;
-                    await page.screenshot({ path: debugScreenshotPath, fullPage: true });
-                    const debugCloudinaryResult = await cloudinary.uploader.upload(debugScreenshotPath);
-                    fs.unlinkSync(debugScreenshotPath);
-                    this.log(`[DEBUG] Debug screenshot uploaded: ${debugCloudinaryResult.secure_url}`, 'info', true);
-                    
-                    throw new Error('Could not find Bookmark link with any of the attempted selectors');
-                }
-
-                this.log('[EVENT] Clicking Bookmark link...', 'info', true);
-                await bookmarkLink.click();
-
-                // Wait longer for the bookmark form to appear and take a screenshot
-                await page.waitForTimeout(5000);
-                
-                // Take a screenshot to see what's on the page after clicking bookmark
-                const afterBookmarkScreenshotPath = `screenshot_after_bookmark_${this.requestId}.png`;
-                await page.screenshot({ path: afterBookmarkScreenshotPath, fullPage: true });
-                const afterBookmarkCloudinaryResult = await cloudinary.uploader.upload(afterBookmarkScreenshotPath);
-                fs.unlinkSync(afterBookmarkScreenshotPath);
-                this.log(`[DEBUG] After bookmark click screenshot: ${afterBookmarkCloudinaryResult.secure_url}`, 'info', true);
-
-                // Debug: Check what input elements are available on the page
-                const allInputs = await page.locator('input').all();
-                this.log(`[DEBUG] Found ${allInputs.length} input elements on page`, 'info', true);
-                
-                for (let i = 0; i < Math.min(allInputs.length, 10); i++) {
-                    try {
-                        const input = allInputs[i];
-                        const tagName = await input.evaluate(el => el.tagName);
-                        const type = await input.evaluate(el => el.type || 'text');
-                        const name = await input.evaluate(el => el.name || '');
-                        const id = await input.evaluate(el => el.id || '');
-                        const placeholder = await input.evaluate(el => el.placeholder || '');
-                        this.log(`[DEBUG] Input ${i}: ${tagName} type="${type}" name="${name}" id="${id}" placeholder="${placeholder}"`, 'info', true);
-                    } catch (debugError) {
-                        this.log(`[DEBUG] Could not inspect input ${i}: ${debugError.message}`, 'detail', false);
-                    }
-                }
-
-            } catch (bookmarkLinkError) {
-                throw new Error(`Could not find or click Bookmark link: ${bookmarkLinkError.message}`);
+            if (!topicGroupNameMatch) {
+                throw new Error('Could not extract group name from current URL');
             }
 
-            // Step 8b: Fill the URL field with multiple selectors
-            this.log('[EVENT] Filling URL field...', 'detail', false);
+            const groupName = topicGroupNameMatch[1];
+            const newTopicUrl = `https://groups.diigo.com/group/${groupName}/content/new_topic`;
+
+            this.log(`[EVENT] Navigating to new topic URL: ${newTopicUrl}`, 'info', true);
+            await page.goto(newTopicUrl, { waitUntil: 'domcontentloaded' });
+            await page.waitForTimeout(3000);
+
+            // Take a screenshot to see the new topic form
+            const newTopicScreenshotPath = `screenshot_new_topic_form_${this.requestId}.png`;
+            await page.screenshot({ path: newTopicScreenshotPath, fullPage: true });
+            const newTopicCloudinaryResult = await cloudinary.uploader.upload(newTopicScreenshotPath);
+            fs.unlinkSync(newTopicScreenshotPath);
+            this.log(`[DEBUG] New topic form screenshot: ${newTopicCloudinaryResult.secure_url}`, 'info', true);
+
+            // Step 8b: For Topic posts, we don't need to fill URL - skip directly to title and content
+
+            // Step 8c: Fill the title field for topic post
+            this.log('[EVENT] Filling title field for topic post...', 'detail', false);
             try {
-                // Try multiple possible selectors for the URL input
-                const possibleUrlSelectors = [
-                    'input#bookmark_item_url[name="url"]',
-                    'input[name="url"]',
-                    'input#bookmark_item_url',
-                    'input[placeholder*="URL"]',
-                    'input[placeholder*="url"]',
-                    'input[type="url"]'
+                // Try multiple possible selectors for the title input in topic form
+                const possibleTitleSelectors = [
+                    'input[name="title"]',
+                    'input#topic_title',
+                    'input[placeholder*="title"]',
+                    'input[placeholder*="Title"]',
+                    'input.inputTxt'
                 ];
 
-                let urlInput = null;
-                let foundUrlSelector = null;
+                let titleInput = null;
+                let foundTitleSelector = null;
 
-                for (const selector of possibleUrlSelectors) {
+                for (const selector of possibleTitleSelectors) {
                     try {
-                        urlInput = page.locator(selector).first();
-                        await urlInput.waitFor({ state: 'visible', timeout: 3000 });
-                        foundUrlSelector = selector;
-                        this.log(`[EVENT] Found URL input with selector: ${selector}`, 'info', true);
+                        titleInput = page.locator(selector).first();
+                        await titleInput.waitFor({ state: 'visible', timeout: 3000 });
+                        foundTitleSelector = selector;
+                        this.log(`[EVENT] Found title input with selector: ${selector}`, 'info', true);
                         break;
                     } catch (selectorError) {
-                        this.log(`[DEBUG] URL selector ${selector} not found, trying next...`, 'detail', false);
+                        this.log(`[DEBUG] Title selector ${selector} not found, trying next...`, 'detail', false);
                         continue;
                     }
                 }
 
-                if (!urlInput || !foundUrlSelector) {
-                    // Take a screenshot to see what's available on the page
-                    const debugScreenshotPath = `screenshot_url_debug_${this.requestId}.png`;
-                    await page.screenshot({ path: debugScreenshotPath, fullPage: true });
-                    const debugCloudinaryResult = await cloudinary.uploader.upload(debugScreenshotPath);
-                    fs.unlinkSync(debugScreenshotPath);
-                    this.log(`[DEBUG] URL debug screenshot uploaded: ${debugCloudinaryResult.secure_url}`, 'info', true);
-                    
-                    throw new Error('Could not find URL input field with any of the attempted selectors');
-                }
-
-                // Get URL from content data
-                const urlToPost = extractedContent.url || userInfo.company_website || userInfo.public_website_1 || 'https://example.com';
-                await urlInput.fill(urlToPost);
-                this.log(`[EVENT] Filled URL: ${urlToPost}`, 'info', true);
-
-                // Click Next button (required to make comment field visible)
-                try {
-                    const possibleNextSelectors = [
-                        'button#next_step',
-                        'input[type="submit"]',
-                        'button:has-text("Next")',
-                        'input[value="Next"]',
-                        '#next_step'
-                    ];
-
-                    let nextButton = null;
-                    let foundNextSelector = null;
-
-                    for (const selector of possibleNextSelectors) {
-                        try {
-                            nextButton = page.locator(selector).first();
-                            await nextButton.waitFor({ state: 'visible', timeout: 3000 });
-                            foundNextSelector = selector;
-                            this.log(`[EVENT] Found Next button with selector: ${selector}`, 'info', true);
-                            break;
-                        } catch (selectorError) {
-                            this.log(`[DEBUG] Next selector ${selector} not found, trying next...`, 'detail', false);
-                            continue;
-                        }
-                    }
-
-                    if (nextButton && foundNextSelector) {
-                        await nextButton.click();
-                        this.log('[EVENT] Clicked Next button - waiting for comment field to become visible', 'info', true);
-
-                        // Wait longer for next form elements to appear
-                        await page.waitForTimeout(5000);
+                if (titleInput && foundTitleSelector) {
+                    // Fill with our own title
+                    let titleToUse = '';
+                    if (extractedContent.title && extractedContent.title !== 'Untitled') {
+                        titleToUse = extractedContent.title;
                     } else {
-                        this.log('[WARNING] Could not find Next button with any selector', 'warning', true);
+                        // Create a meaningful title from user's business info
+                        titleToUse = `${userInfo.first_name || 'Business'} ${userInfo.business_categories ? userInfo.business_categories.join(' & ') : 'Resource'} - ${userInfo.company_website || 'Professional Services'}`;
                     }
 
-                } catch (nextError) {
-                    this.log(`[WARNING] Error clicking Next button: ${nextError.message}`, 'warning', true);
-                }
-
-            } catch (urlError) {
-                throw new Error(`Could not fill URL field: ${urlError.message}`);
-            }
-
-            // Step 8c: Clear auto-filled title and fill our own title
-            this.log('[EVENT] Clearing auto-filled title and filling our own...', 'detail', false);
-            try {
-                const titleInput = page.locator('input#bookmark_item_title[name="title"]');
-                await titleInput.waitFor({ state: 'visible', timeout: 10000 });
-                
-                // Clear the auto-filled title
-                await titleInput.selectText();
-                await titleInput.press('Delete');
-                
-                // Fill with our own title
-                let titleToUse = '';
-                if (extractedContent.title && extractedContent.title !== 'Untitled') {
-                    titleToUse = extractedContent.title;
+                    await titleInput.fill(titleToUse);
+                    this.log(`[EVENT] Filled title: ${titleToUse}`, 'info', true);
                 } else {
-                    // Create a meaningful title from user's business info
-                    titleToUse = `${userInfo.first_name || 'Business'} ${userInfo.business_categories ? userInfo.business_categories.join(' & ') : 'Resource'} - ${userInfo.company_website || 'Professional Services'}`;
+                    this.log(`[WARNING] Could not find title input field`, 'warning', true);
                 }
-                
-                await titleInput.fill(titleToUse);
-                this.log(`[EVENT] Filled title: ${titleToUse}`, 'info', true);
-                
+
             } catch (titleError) {
                 this.log(`[WARNING] Could not fill title field: ${titleError.message}`, 'warning', true);
                 // Continue without custom title - not critical for success
             }
 
-            // Step 8d: Fill the comment/content textarea with multiple selectors and increased timeout
-            this.log('[EVENT] Filling comment/content field...', 'detail', false);
+            // Step 8d: Fill the comment/content textarea for topic post
+            this.log('[EVENT] Filling comment/content field for topic post...', 'detail', false);
             try {
-                // Try multiple possible selectors for the comment textarea
+                // Try multiple possible selectors for the topic content textarea
                 const possibleCommentSelectors = [
-                    'textarea#bookmark_item_content[name="comment"]',
                     'textarea[name="comment"]',
-                    'textarea#bookmark_item_content',
+                    'textarea[name="content"]',
+                    'textarea#topic_content',
                     'textarea[placeholder*="comment"]',
                     'textarea[placeholder*="description"]',
-                    'textarea.inputTxt2'
+                    'textarea[placeholder*="content"]',
+                    'textarea.inputTxt2',
+                    'textarea'
                 ];
 
                 let commentTextarea = null;
@@ -795,11 +634,11 @@ class DiigoForumsAdapter extends BaseAdapter {
                     const debugCommentCloudinaryResult = await cloudinary.uploader.upload(debugCommentScreenshotPath);
                     fs.unlinkSync(debugCommentScreenshotPath);
                     this.log(`[DEBUG] Comment debug screenshot uploaded: ${debugCommentCloudinaryResult.secure_url}`, 'info', true);
-                    
+
                     throw new Error('Could not find comment textarea with any of the attempted selectors');
                 }
 
-                // Create content from title and description
+                // Create content from title and description - APPEND URL IN COMMENT FOR FORUMS
                 let contentToPost = '';
                 if (extractedContent.title && extractedContent.title !== 'Untitled') {
                     contentToPost += extractedContent.title;
@@ -812,7 +651,7 @@ class DiigoForumsAdapter extends BaseAdapter {
                     cleanDescription = cleanDescription.replace(/\([^)]*https?:\/\/[^)]*\)/g, ''); // Remove (url) format
                     cleanDescription = cleanDescription.replace(/https?:\/\/[^\s]+/g, ''); // Remove standalone URLs
                     cleanDescription = cleanDescription.replace(/\s+/g, ' ').trim(); // Clean up extra spaces
-                    
+
                     contentToPost += (contentToPost ? '\n\n' : '') + cleanDescription;
                 } else if (extractedContent.body) {
                     let cleanBody = extractedContent.body.substring(0, 500);
@@ -822,13 +661,20 @@ class DiigoForumsAdapter extends BaseAdapter {
                     cleanBody = cleanBody.replace(/\([^)]*https?:\/\/[^)]*\)/g, '');
                     cleanBody = cleanBody.replace(/https?:\/\/[^\s]+/g, '');
                     cleanBody = cleanBody.replace(/\s+/g, ' ').trim();
-                    
+
                     contentToPost += (contentToPost ? '\n\n' : '') + cleanBody;
                 }
 
                 // Fallback content if nothing available
                 if (!contentToPost.trim()) {
                     contentToPost = `Check out this great resource from ${userInfo.first_name || 'our'} ${userInfo.business_categories ? userInfo.business_categories.join(' & ') : 'business'}!`;
+                }
+
+                // APPEND URL IN COMMENT FOR FORUMS (not in title)
+                const urlToAppend = extractedContent.url || userInfo.company_website || userInfo.public_website_1;
+                if (urlToAppend) {
+                    contentToPost += `\n\n${urlToAppend}`;
+                    this.log(`[EVENT] Appended URL to content: ${urlToAppend}`, 'info', true);
                 }
 
                 await commentTextarea.fill(contentToPost);
@@ -838,82 +684,164 @@ class DiigoForumsAdapter extends BaseAdapter {
                 throw new Error(`Could not fill comment field: ${commentError.message}`);
             }
 
-            // Step 8d: Fill the tags field with keywords
-            this.log('[EVENT] Filling tags field...', 'detail', false);
+            // Step 8e: Fill the tags field with keywords (if available in topic form)
+            this.log('[EVENT] Filling tags field if available...', 'detail', false);
             try {
-                const tagsInput = page.locator('input#link_item_tags[name="tags"]');
-                await tagsInput.waitFor({ state: 'visible', timeout: 10000 });
+                // Try multiple possible selectors for the tags input in topic form
+                const possibleTagsSelectors = [
+                    'input[name="tags"]',
+                    'input#topic_tags',
+                    'input[placeholder*="tags"]',
+                    'input[placeholder*="Tags"]'
+                ];
 
-                // Create tags from business categories, target keywords, and content
-                let tags = [];
+                let tagsInput = null;
+                let foundTagsSelector = null;
 
-                // Add business categories as tags
-                if (userInfo.business_categories) {
-                    tags.push(...userInfo.business_categories);
+                for (const selector of possibleTagsSelectors) {
+                    try {
+                        tagsInput = page.locator(selector).first();
+                        await tagsInput.waitFor({ state: 'visible', timeout: 3000 });
+                        foundTagsSelector = selector;
+                        this.log(`[EVENT] Found tags input with selector: ${selector}`, 'info', true);
+                        break;
+                    } catch (selectorError) {
+                        this.log(`[DEBUG] Tags selector ${selector} not found, trying next...`, 'detail', false);
+                        continue;
+                    }
                 }
 
-                // Add target keywords if available
-                if (userInfo.target_keywords) {
-                    const keywords = userInfo.target_keywords.split(',').map(k => k.trim());
-                    tags.push(...keywords);
+                if (tagsInput && foundTagsSelector) {
+                    // Create tags from business categories, target keywords, and content
+                    let tags = [];
+
+                    // Add business categories as tags
+                    if (userInfo.business_categories) {
+                        tags.push(...userInfo.business_categories);
+                    }
+
+                    // Add target keywords if available
+                    if (userInfo.target_keywords) {
+                        const keywords = userInfo.target_keywords.split(',').map(k => k.trim());
+                        tags.push(...keywords);
+                    }
+
+                    // Add determined categories as tags
+                    tags.push(...categories);
+
+                    // Add some generic relevant tags
+                    tags.push('business', 'resources', 'tools');
+
+                    // Remove duplicates and join with spaces
+                    const uniqueTags = [...new Set(tags)].filter(tag => tag && tag.length > 0);
+                    const tagsString = uniqueTags.join(' ');
+
+                    await tagsInput.fill(tagsString);
+                    this.log(`[EVENT] Filled tags: ${tagsString}`, 'info', true);
+                } else {
+                    this.log(`[INFO] No tags field found in topic form - skipping tags`, 'info', true);
                 }
-
-                // Add determined categories as tags
-                tags.push(...categories);
-
-                // Add some generic relevant tags
-                tags.push('business', 'resources', 'tools');
-
-                // Remove duplicates and join with spaces
-                const uniqueTags = [...new Set(tags)].filter(tag => tag && tag.length > 0);
-                const tagsString = uniqueTags.join(' ');
-
-                await tagsInput.fill(tagsString);
-                this.log(`[EVENT] Filled tags: ${tagsString}`, 'info', true);
 
             } catch (tagsError) {
-                throw new Error(`Could not fill tags field: ${tagsError.message}`);
+                this.log(`[WARNING] Could not fill tags field: ${tagsError.message}`, 'warning', true);
+                // Continue without tags - not critical for topic posts
             }
 
-            // Step 8e: Click the Post button
-            this.log('[EVENT] Submitting the bookmark post...', 'detail', false);
+            // Step 8f: Click the Post button for topic submission
+            this.log('[EVENT] Submitting the topic post...', 'detail', false);
             try {
-                const postButton = page.locator('input.firstIBtn[type="submit"][value="Post"]');
-                await postButton.waitFor({ state: 'visible', timeout: 10000 });
+                // Try multiple possible selectors for the post/submit button in topic form
+                const possiblePostSelectors = [
+                    'input[type="submit"][value="Post"]',
+                    'input.firstIBtn[type="submit"]',
+                    'button[type="submit"]',
+                    'input[value="Submit"]',
+                    'button:has-text("Post")',
+                    'button:has-text("Submit")'
+                ];
 
-                this.log('[EVENT] Found Post button - submitting...', 'info', true);
+                let postButton = null;
+                let foundPostSelector = null;
+
+                for (const selector of possiblePostSelectors) {
+                    try {
+                        postButton = page.locator(selector).first();
+                        await postButton.waitFor({ state: 'visible', timeout: 3000 });
+                        foundPostSelector = selector;
+                        this.log(`[EVENT] Found Post button with selector: ${selector}`, 'info', true);
+                        break;
+                    } catch (selectorError) {
+                        this.log(`[DEBUG] Post selector ${selector} not found, trying next...`, 'detail', false);
+                        continue;
+                    }
+                }
+
+                if (!postButton || !foundPostSelector) {
+                    throw new Error('Could not find Post/Submit button with any of the attempted selectors');
+                }
+
+                this.log('[EVENT] Found Post button - submitting topic...', 'info', true);
                 await postButton.click();
-                
-                // Wait for the post to be processed (no navigation happens)
+
+                // Wait for the post to be processed
                 await page.waitForTimeout(5000);
 
-                this.log('[EVENT] Bookmark post submitted successfully!', 'success', true);
+                this.log('[EVENT] Topic post submitted successfully!', 'success', true);
 
             } catch (postError) {
-                throw new Error(`Could not submit post: ${postError.message}`);
+                throw new Error(`Could not submit topic post: ${postError.message}`);
             }
 
-            // Step 9: Get the permalink by clicking "more" dropdown
-            this.log('[EVENT] Getting permalink from more menu...', 'detail', false);
+            // Step 9: Navigate back to group page to find our newly posted topic
+            this.log('[EVENT] Navigating back to group page to find our newly posted topic...', 'info', true);
+
+            // Navigate back to the group page where we can find title_link_0
+            const groupPageUrl = `https://groups.diigo.com/group/${groupName}`;
+            await page.goto(groupPageUrl, { waitUntil: 'domcontentloaded' });
+            await page.waitForTimeout(3000);
+
+            // Step 10: Get the permalink from title_link_0
+            this.log('[EVENT] Getting permalink of the newly posted topic...', 'detail', false);
             let permalink = null;
 
             try {
-                // Find and click the "more" dropdown
-                const moreButton = page.locator('a.menuItem:has-text("more")').first();
-                await moreButton.waitFor({ state: 'visible', timeout: 10000 });
-                this.log('[EVENT] Found "more" dropdown - clicking...', 'info', true);
-                await moreButton.click();
+                // SUPER EASY PERMALINK EXTRACTION FOR FORUMS - Find title_link_0
+                this.log('[EVENT] Looking for our newly posted topic (title_link_0)...', 'info', true);
 
-                // Wait for dropdown menu to appear
-                await page.waitForTimeout(2000);
+                // Wait a moment for the page to fully load
+                await page.waitForTimeout(3000);
 
-                // Look for "Link to this item" link
-                const linkToItemElement = page.locator('a[href*="/content/"]:has-text("Link to this item")');
-                await linkToItemElement.waitFor({ state: 'visible', timeout: 10000 });
+                // Find OUR newly posted topic using the correct selector - it should be the first one (title_link_0)
+                try {
+                    // Use the exact selector for the first/latest post (our newly posted topic)
+                    const ourPostTitleLink = page.locator('#title_link_0');
+                    await ourPostTitleLink.waitFor({ state: 'visible', timeout: 5000 });
 
-                // Get the href attribute which contains the permalink
-                permalink = await linkToItemElement.getAttribute('href');
-                this.log(`[EVENT] Found permalink: ${permalink}`, 'success', true);
+                    // Get the href attribute directly - no clicking needed!
+                    permalink = await ourPostTitleLink.getAttribute('href');
+
+                    // Make sure it's a full URL
+                    if (permalink && !permalink.startsWith('http')) {
+                        permalink = `https://groups.diigo.com${permalink}`;
+                    }
+
+                    this.log(`[EVENT] Got permalink of our newly posted topic: ${permalink}`, 'success', true);
+
+                } catch (specificError) {
+                    // Fallback: try the first post title link
+                    this.log('[DEBUG] Could not find #title_link_0, trying first post title...', 'detail', false);
+
+                    const firstPostLink = page.locator('a[id^="title_link_"]').first();
+                    await firstPostLink.waitFor({ state: 'visible', timeout: 3000 });
+
+                    permalink = await firstPostLink.getAttribute('href');
+
+                    if (permalink && !permalink.startsWith('http')) {
+                        permalink = `https://groups.diigo.com${permalink}`;
+                    }
+
+                    this.log(`[EVENT] Got permalink from first post: ${permalink}`, 'success', true);
+                }
 
             } catch (permalinkError) {
                 this.log(`[WARNING] Could not get permalink: ${permalinkError.message}`, 'warning', true);
@@ -940,7 +868,7 @@ class DiigoForumsAdapter extends BaseAdapter {
                 postUrl: finalPostUrl,
                 permalink: permalink,
                 screenshotUrl: cloudinaryUrl,
-                message: 'Diigo Forums bookmark post created successfully with permalink!'
+                message: 'Diigo Forums topic post created successfully with permalink!'
             };
 
         } catch (error) {
