@@ -10,7 +10,7 @@ class SecretSearchEngineLabsAdapter extends BaseAdapter {
     }
 
     async publish() {
-        this.log(`[EVENT] Entering SecretSearchEngineLabsAdapter publish method for ${this.website.url}.`, 'info', true);
+        this.log(`[EVENT] Entering SecretSearchEngineLabsAdapter publish method for ${this.content.url}.`, 'info', true);
         let browser;
         let context;
         let page;
@@ -29,7 +29,7 @@ class SecretSearchEngineLabsAdapter extends BaseAdapter {
             try {
                 await urlInput.waitFor({ state: 'visible', timeout: 10000 });
                 this.log('[EVENT] Filling URL input field...', 'detail', false);
-                await urlInput.fill(this.website.url);
+                await urlInput.fill(this.content.url);
                 this.log('[EVENT] URL input field filled.', 'detail', false);
             } catch (error) {
                 this.log(`[ERROR] Failed to locate or fill URL input field: ${error.message}`, 'error', true);
@@ -62,13 +62,13 @@ class SecretSearchEngineLabsAdapter extends BaseAdapter {
             try {
                 const bodyContent = await page.textContent('body');
                 if (bodyContent.includes('is already included in the index, no need to resubmit!')) {
-                    successMessage = `URL ${this.website.url} is already included in the index, no need to resubmit!`;
+                    successMessage = `URL ${this.content.url} is already included in the index, no need to resubmit!`;
                     this.log(`[INFO] ${successMessage}`, 'info', true);
                 } else if (bodyContent.includes('URL added to queue!')) {
-                    successMessage = `URL ${this.website.url} successfully added to queue!`;
+                    successMessage = `URL ${this.content.url} successfully added to queue!`;
                     this.log(`[SUCCESS] ${successMessage}`, 'success', true);
                 } else {
-                    successMessage = `Unknown submission result for ${this.website.url}. Body content: ${bodyContent.substring(0, 200)}...`;
+                    successMessage = `Unknown submission result for ${this.content.url}. Body content: ${bodyContent.substring(0, 200)}...`;
                     this.log(`[WARNING] ${successMessage}`, 'warning', true);
                 }
                 const screenshotPath = `screenshot_completion_${this.requestId}.png`;

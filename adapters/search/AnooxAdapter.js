@@ -10,7 +10,7 @@ class AnooxAdapter extends BaseAdapter {
     }
 
     async publish() {
-        this.log(`Starting Anoox submission for ${this.website.url}`, 'info', true);
+        this.log(`Starting Anoox submission for ${this.content.url}`, 'info', true);
         let browser, context, page;
 
         try {
