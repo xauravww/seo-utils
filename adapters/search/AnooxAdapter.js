@@ -16,7 +16,7 @@ class AnooxAdapter extends BaseAdapter {
         try {
             // Launch browser
             browser = await chromium.launch({
-                headless: false,
+                headless: true,
                 args: ['--no-sandbox', '--disable-setuid-sandbox']
             });
             context = await browser.newContext();

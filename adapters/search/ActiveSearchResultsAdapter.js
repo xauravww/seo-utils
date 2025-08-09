@@ -24,12 +24,18 @@ class ActiveSearchResultsAdapter extends BaseAdapter {
             this.log(`[EVENT] Navigating to submission page: ${this.submissionUrl}`, 'detail', false);
             await page.goto(this.submissionUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
             this.log('[EVENT] Navigation complete.', 'detail', false);
+            // Extract email and URL - simple approach
+            const email = this.content.email;
+            const url = this.content.url;
+            this.log(`[EVENT] Using email: ${email}`, 'detail', false);
+            this.log(`[EVENT] Using URL: ${url}`, 'detail', false);
+
             this.log('[EVENT] Locating URL input field...', 'detail', false);
             const urlInput = page.locator('input[name="url"]');
             try {
                 await urlInput.waitFor({ state: 'visible', timeout: 10000 });
                 this.log('[EVENT] Filling URL input field...', 'detail', false);
-                await urlInput.fill(this.website.url);
+                await urlInput.fill(url);
                 this.log('[EVENT] URL input field filled.', 'detail', false);
             } catch (error) {
                 this.log(`[ERROR] Failed to locate or fill URL input field: ${error.message}`, 'error', true);
@@ -39,12 +45,13 @@ class ActiveSearchResultsAdapter extends BaseAdapter {
                 }
                 throw error;
             }
+
             this.log('[EVENT] Locating Email input field...', 'detail', false);
             const emailInput = page.locator('input[name="email"]');
             try {
                 await emailInput.waitFor({ state: 'visible', timeout: 10000 });
                 this.log('[EVENT] Filling Email input field...', 'detail', false);
-                await emailInput.fill(this.website.credentials.email);
+                await emailInput.fill(email);
                 this.log('[EVENT] Email input field filled.', 'detail', false);
             } catch (error) {
                 this.log(`[ERROR] Failed to locate or fill Email input field: ${error.message}`, 'error', true);
