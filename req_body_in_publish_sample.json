@@ -1,0 +1,172 @@
+{
+    "title": "Untitled",
+    "content": "```json\n{\n  \"title\": \"NewsOn: The Premier Indian News Sharing Platform – Is It Right For You?\",\n  \"markdown\": \"Are you looking for a powerful, user-friendly platform to share your news and perspectives with a wide Indian audience? In today's digital age, having a reliable [news sharing website](https://newsoin.com) is crucial for citizen journalists, bloggers, and anyone passionate about spreading information. Let's dive into NewsOn, a platform gaining significant traction in India.\\n\\n**What is NewsOn?**\\n\\nNewsOn is an [indian news sharing platform](https://newsoin.com) designed to empower individuals to share news, articles, and opinions. It aims to democratize information, allowing diverse voices to be heard and contributing to a more informed society. The platform's core mission resonates deeply in a country as vast and varied as India, where local stories often get overshadowed by mainstream media.\\n\\n**Key Features and Benefits**\\n\\n*   **User-Friendly Interface:** NewsOn boasts an intuitive interface, making it easy for anyone, regardless of technical expertise, to [share news on newsoin](https://newsoin.com). The simple design ensures a smooth experience from content creation to publication.\\n*   **Wide Reach:** By leveraging the power of the internet, NewsOn provides a platform to reach a broad audience across India and even beyond. This is particularly beneficial for local news and stories that might not otherwise receive national attention.\\n*   **Free to Use:** One of the most compelling aspects of NewsOn is that it is a [free news sharing website](https://newsoin.com). This removes financial barriers, allowing more people to participate in the news-sharing ecosystem. You can [try newsoin for free lifetime](https://newsoin.com), making it an attractive option for those just starting.\\n\\n**Is NewsOn Safe and Reliable?**\\n\\nConcerns about the safety and reliability of online platforms are valid, especially in the realm of news sharing. Determining [is newsoin safe](https://newsoin.com) is essential for any user. While every platform has its challenges, NewsOn strives to maintain a safe environment by implementing moderation policies and encouraging users to report any inappropriate content. As with any online platform, it's always advisable to exercise caution and critical thinking when consuming information.\\n\\n**NewsOn Review: Weighing the Pros and Cons**\\n\\nBefore committing to a platform, it's wise to consider a [newsoin review](https://newsoin.com). NewsOn presents several advantages, including its user-friendly interface, wide reach, and free accessibility. However, like any platform, it's not without its drawbacks. Users have the responsibility to verify the information they find on the platform, as NewsOn, like other user-generated content sites, relies on its community to maintain accuracy and integrity. The platform provides an opportunity for [free indian news newsoin](https://newsoin.com), but responsible usage is vital for the platform to thrive.\\n\\n**Getting Started with NewsOn**\\n\\nLearning [how to share news on newsoin](https://newsoin.com) is straightforward. Simply create an account, familiarize yourself with the platform's guidelines, and start sharing your news and perspectives. Remember to cite your sources and be mindful of the platform's content policies.\\n\\n**Conclusion**\\n\\nNewsOn offers a valuable platform for individuals in India to share news, stories, and perspectives. Its user-friendly interface, wide reach, and free accessibility make it an attractive option for those seeking to contribute to a more informed society. While it's essential to exercise caution and critical thinking when consuming information, NewsOn has the potential to democratize news sharing and empower voices across India.\"\n}\n```",
+    "api_keys": [],
+    "info": {
+        "pkg_id": 2,
+        "user_id": 20,
+        "name": "Basic",
+        "description": "NA",
+        "sites_details": [
+            {
+                "target": 2,
+                "category": "article",
+                "frequency": "weekly",
+                "minimumInclude": 3
+            },
+            {
+                "target": 1,
+                "category": "blog",
+                "frequency": "weekly",
+                "minimumInclude": 1
+            },
+            {
+                "target": 2,
+                "category": "search",
+                "frequency": "weekly",
+                "minimumInclude": 2
+            },
+            {
+                "target": 2,
+                "category": "ping",
+                "frequency": "weekly",
+                "minimumInclude": 2
+            },
+            {
+                "target": 1,
+                "category": "classified",
+                "frequency": "weekly",
+                "minimumInclude": 1
+            },
+            {
+                "target": 1,
+                "category": "forum",
+                "frequency": "weekly",
+                "minimumInclude": 1
+            },
+            {
+                "target": 1,
+                "category": "bookmarking",
+                "frequency": "weekly",
+                "minimumInclude": 1
+            },
+            {
+                "target": 1,
+                "category": "directory",
+                "frequency": "weekly",
+                "minimumInclude": 1
+            },
+            {
+                "target": 1,
+                "category": "social_media",
+                "frequency": "weekly",
+                "minimumInclude": 1
+            }
+        ],
+        "campaign_id": 19758,
+        "category": "search",
+        "websites": [
+            {
+                "id": 47,
+                "name": "search/activesearchresults.com",
+                "url": "https://activesearchresults.com",
+                "category": "search",
+                "login_page": null,
+                "register_page": null,
+                "post_page": "https://www.activesearchresults.com/addwebsite.php",
+                "is_verified": false,
+                "user_id": 19,
+                "created_at": "2025-07-11T08:27:52.954Z",
+                "updated_at": "2025-08-09T10:14:04.513Z",
+                "score": null,
+                "have_credential": false,
+                "credential_type": null,
+                "extra": null
+            },
+            {
+                "id": 46,
+                "name": "search/secretsearchenginelabs.com",
+                "url": "http://secretsearchenginelabs.com",
+                "category": "search",
+                "login_page": null,
+                "register_page": null,
+                "post_page": "http://www.secretsearchenginelabs.com/add-url.php",
+                "is_verified": false,
+                "user_id": 19,
+                "created_at": "2025-07-11T08:27:52.645Z",
+                "updated_at": "2025-08-09T10:14:04.513Z",
+                "score": null,
+                "have_credential": false,
+                "credential_type": null,
+                "extra": null
+            },
+            {
+                "id": 96,
+                "name": "search/anoox.com",
+                "url": "https://anoox.com",
+                "category": "search",
+                "login_page": null,
+                "register_page": null,
+                "post_page": null,
+                "is_verified": true,
+                "user_id": 19,
+                "created_at": "2025-08-09T12:30:26.633Z",
+                "updated_at": "2025-08-09T12:30:26.633Z",
+                "score": 1,
+                "have_credential": false,
+                "credential_type": null,
+                "extra": null
+            }
+        ],
+        "user_email": "mdauravhu@gmail.com",
+        "user_name": "Saurav Lakhotia",
+        "user": {
+            "id": 20,
+            "first_name": "Saurav",
+            "last_name": "Lakhotia",
+            "email": "mdauravhu@gmail.com",
+            "role": "user",
+            "is_verified": true,
+            "profile_photo": null,
+            "company_id": null,
+            "team_ids": null,
+            "designation": null,
+            "account_person_email": null,
+            "account_person_whatsapp_number": null,
+            "public_mobile_number": "+919812019517",
+            "public_landline_number": null,
+            "public_email_address": "mutebadshah4u@gmail.com",
+            "public_website_1": "https://newsoin.com",
+            "public_website_2": null,
+            "main_office_address": null,
+            "head_office_address": null,
+            "branch_office_address": null,
+            "business_categories": [
+                "Technology"
+            ],
+            "business_type": null,
+            "target_audience": null,
+            "target_geo_location": null,
+            "target_keywords": null,
+            "about_business_description": "I am a solo owner.",
+            "company_bio": null,
+            "author_bio": null,
+            "company_website": "https://newsoin.com",
+            "full_name": null,
+            "country": "IN",
+            "timezone": "Asia/Kolkata",
+            "preferred_language": "English",
+            "state": null,
+            "fax": null,
+            "district": null,
+            "city": null,
+            "account_type": "individual",
+            "two_factor_enabled": false,
+            "limit": "{\"package_id\":2,\"package_name\":\"Basic\",\"max_users\":1,\"max_keywords\":100}",
+            "refer_id": null,
+            "created_at": "2025-07-11T07:18:30.436Z",
+            "updated_at": "2025-07-11T07:22:02.559Z",
+            "account_status": "Review"
+        }
+    }
+}

@@ -13,6 +13,7 @@ import InstagramAdapter from './social_media/InstagramAdapter.js';
 import PlurkAdapter from './social_media/PlurkAdapter.js';
 import SecretSearchEngineLabsAdapter from './search/SecretSearchEngineLabsAdapter.js';
 import ActiveSearchResultsAdapter from './search/ActiveSearchResultsAdapter.js';
+import AnooxAdapter from './search/AnooxAdapter.js';
 import BookmarkZooAdapter from './bookmarking/BookmarkZooAdapter.js';
 import TeslaPearlBookmarkingAdapter from './bookmarking/TeslaPearlBookmarkingAdapter.js';
 import DiigoAdapter from './bookmarking/DiigoAdapter.js';
@@ -55,6 +56,7 @@ export {
   PlurkAdapter,
   SecretSearchEngineLabsAdapter,
   ActiveSearchResultsAdapter,
+  AnooxAdapter,
   BookmarkZooAdapter,
   TeslaPearlBookmarkingAdapter,
   DiigoAdapter,

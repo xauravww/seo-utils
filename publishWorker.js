@@ -663,14 +663,14 @@ const startAllCategoryWorkers = () => {
           }
         } else {
           // New format: per-website job
-          const { website, content, campaignId, userId, requestId: reqId } = job.data;
+          const { website, content, campaignId, userId, requestId: reqId, info } = job.data;
           requestId = reqId;
           await job.log(`[BullMQ] [${category}] Starting job ${job.id} (requestId: ${requestId})`);
 
           try {
             // Process the website
             console.log("process website in startAllCategoryWorkers")
-            const result = await processWebsite({ requestId, website, content, campaignId, userId }, job);
+            const result = await processWebsite({ requestId, website, content, campaignId, userId, info }, job);
  console.log("process website result in startAllCategoryWorkers: ",result)
             // Return success or throw error for BullMQ to handle correctly
             if (result.success) {

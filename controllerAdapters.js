@@ -58,7 +58,8 @@ import {
   KugliAdapter,
   DiigoForumsAdapter,
   WriteAsAdapter,
-  TelegraphAdapter
+  TelegraphAdapter,
+  AnooxAdapter
 } from './adapters/index.js';
 import BaseAdapter from './adapters/BaseAdapter.js';
 
@@ -113,8 +114,8 @@ const domainAdapterMap = {
   'cl1p.net': Cl1pAdapter,
   'controlc.com': ControlCAdapter,
   'jumparticles.com': JumpArticlesAdapter,
-  'write.as':WriteAsAdapter,
-  'telegra.ph':TelegraphAdapter,
+  'write.as': WriteAsAdapter,
+  'telegra.ph': TelegraphAdapter,
 
   // Blogs
   'dev.to': DevToAdapter,
@@ -151,7 +152,8 @@ const domainAdapterMap = {
   'secretsearchenginelabs.com': SecretSearchEngineLabsAdapter,
   'activesearchresults.com': ActiveSearchResultsAdapter,
   'gainweb.org': GainWebAdapter,
-  'socialsubmissionengine.com': SocialSubmissionEngineAdapter
+  'socialsubmissionengine.com': SocialSubmissionEngineAdapter,
+  'anoox.com': AnooxAdapter
 };
 
 // Priority 2: Category-based fallbacks (lower priority)
