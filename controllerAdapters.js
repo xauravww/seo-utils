@@ -28,7 +28,7 @@ import {
   CityDataForumAdapter,
   OpenPathshalaForumAdapter,
   BoardsIEForumAdapter,
-  ForumAdapter,
+  KahkahamAdapter,
   PingMyLinksAdapter,
   PingInAdapter,
   RedditAdapter,
@@ -116,6 +116,7 @@ const domainAdapterMap = {
   'jumparticles.com': JumpArticlesAdapter,
   'write.as': WriteAsAdapter,
   'telegra.ph': TelegraphAdapter,
+  'kahkaham.net': KahkahamAdapter,
 
   // Blogs
   'dev.to': DevToAdapter,

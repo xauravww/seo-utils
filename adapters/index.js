@@ -39,6 +39,7 @@ import ArticleAlleyAdapter from './article/ArticleAlleyAdapter.js'
 import WriteAsAdapter from './article/WriteAsAdapter.js'
 import TelegraphAdapter from './article/TelegraphAdapter.js'
 import KugliAdapter from './classified/KugliAdapter.js'
+import KahkahamAdapter from './article/KahkahamAdapter.js'
 
 export {
   WordPressAdapter,
@@ -81,5 +82,6 @@ export {
   WriteAsAdapter,
   TelegraphAdapter,
   KugliAdapter,
-  DiigoForumsAdapter
+  DiigoForumsAdapter,
+  KahkahamAdapter
 };
