@@ -1,24 +1,27 @@
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
-import { v4 as uuidv4 } from 'uuid';
-import * as websocketLogger from '../websocketLogger.js';
-import { Worker } from 'worker_threads';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import axios from 'axios'; // Import axios for making API requests
-import { Queue } from 'bullmq';
-import Redis from 'ioredis';
+import { v4 as uuidv4 } from "uuid";
+import * as websocketLogger from "../websocketLogger.js";
+import { Worker } from "worker_threads";
+import path from "path";
+import { fileURLToPath } from "url";
+import axios from "axios"; // Import axios for making API requests
+import { Queue } from "bullmq";
+import Redis from "ioredis";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // This will be our new background worker for handling all publications.
-// import publishWorker from '../publishWorker.js'; 
+// import publishWorker from '../publishWorker.js';
 
-console.log('[controllers/publishController.js] REDIS_HOST:', process.env.REDIS_HOST);
+console.log(
+  "[controllers/publishController.js] REDIS_HOST:",
+  process.env.REDIS_HOST,
+);
 
-const redisProtocol = process.env.REDIS_PROTOCOL || 'redis://';
-const redisHost = process.env.REDIS_HOST || 'redis';
+const redisProtocol = process.env.REDIS_PROTOCOL || "redis://";
+const redisHost = process.env.REDIS_HOST || "redis";
 const redisPort = process.env.REDIS_PORT || 6379;
 const redisPassword = process.env.REDIS_PASSWORD;
 const redisUrl = redisPassword
@@ -37,31 +40,34 @@ async function trackCampaignJob(campaignId, jobId) {
 
 // Define all main categories
 const categories = [
-  'blog',
-  'article',
-  'forum',
-  'social_media',
-  'search',
-  'ping',
-  'classified',
-  'bookmarking',
-  'directory',
-  'other'
+  "blog",
+  "article",
+  "forum",
+  "social_media",
+  "linked_comment", // Corrected category name
+  "search",
+  "ping",
+  "classified",
+  "bookmarking",
+  "directory",
+  "other",
 ];
 
 // Create a BullMQ queue for each category
 const queues = {};
-categories.forEach(cat => {
+categories.forEach((cat) => {
   queues[cat] = new Queue(`${cat}Queue`, { connection: redisConnectionConfig });
 });
 
 // Helper to get the correct queue by category
 function getQueueByCategory(category) {
-  const cat = (category || '').toLowerCase().trim();
+  const cat = (category || "").toLowerCase().trim();
   if (!queues[cat]) {
-    console.warn(`[BullMQ] Unknown category "${category}" (normalized: "${cat}"), using 'other' queue.`);
+    console.warn(
+      `[BullMQ] Unknown category "${category}" (normalized: "${cat}"), using 'other' queue.`,
+    );
   }
-  return queues[cat] || queues['other'];
+  return queues[cat] || queues["other"];
 }
 
 const queueConcurrency = parseInt(process.env.QUEUE_CONCURRENCY, 10) || 1;
@@ -73,54 +79,97 @@ async function processPublishJob(reqBody, requestId) {
   let campaign_id = null;
   let user_id = null;
   let parsedContent = {};
-  const { title, content, info, api_keys, credential, category, sites_details } = reqBody;
+  const {
+    title,
+    content,
+    info,
+    api_keys,
+    credential,
+    category,
+    sites_details,
+  } = reqBody;
   // 1. Parse content first, as it's common across formats
   console.log(`[${requestId}] Step 1: Parsing content.`);
-  if (typeof content === 'string') {
+  if (typeof content === "string") {
     let cleanedContent = content.trim();
-    if (cleanedContent.startsWith('```json')) {
-      cleanedContent = cleanedContent.replace(/^```json/, '').trim();
+    if (cleanedContent.startsWith("```json")) {
+      cleanedContent = cleanedContent.replace(/^```json/, "").trim();
     }
-    if (cleanedContent.endsWith('```')) {
-      cleanedContent = cleanedContent.replace(/```$/, '').trim();
+    if (cleanedContent.endsWith("```")) {
+      cleanedContent = cleanedContent.replace(/```$/, "").trim();
     }
     try {
       parsedContent = JSON.parse(cleanedContent);
     } catch (e) {
-      websocketLogger.log(requestId, `❌ Error parsing content JSON: ${e.message}`, 'error');
+      websocketLogger.log(
+        requestId,
+        `❌ Error parsing content JSON: ${e.message}`,
+        "error",
+      );
       parsedContent = { markdown: content, html: content };
     }
-  } else if (content && typeof content === 'object') {
+  } else if (content && typeof content === "object") {
     parsedContent = content;
   }
   let campaign_category = category || (info && info.category);
   // Ensure sitesDetails is always an array before using .find
-  let sitesDetails = (info && Array.isArray(info.sites_details))
-    ? info.sites_details
-    : (Array.isArray(sites_details) ? sites_details : []);
+  let sitesDetails =
+    info && Array.isArray(info.sites_details)
+      ? info.sites_details
+      : Array.isArray(sites_details)
+        ? sites_details
+        : [];
   if (!Array.isArray(sitesDetails)) sitesDetails = [];
   let minimumInclude = 0;
   let availableWebsites = [];
   let skippedWebsites = [];
-  const categoryDetail = sitesDetails.find(detail => detail.category === campaign_category);
+  const categoryDetail = sitesDetails.find(
+    (detail) => detail.category === campaign_category,
+  );
   if (categoryDetail && categoryDetail.minimumInclude !== undefined) {
     minimumInclude = categoryDetail.minimumInclude;
-    websocketLogger.log(requestId, `[Config] Minimum include for category "${campaign_category}": ${minimumInclude}`, 'info');
+    websocketLogger.log(
+      requestId,
+      `[Config] Minimum include for category "${campaign_category}": ${minimumInclude}`,
+      "info",
+    );
     console.log(`[${requestId}] Minimum include found: ${minimumInclude}`);
   } else {
-    websocketLogger.log(requestId, `[Config] Minimum include not specified for category "${campaign_category}". Will attempt to use all matching websites.`, 'warning');
-    console.log(`[${requestId}] Minimum include not specified. Using all matching websites.`);
+    websocketLogger.log(
+      requestId,
+      `[Config] Minimum include not specified for category "${campaign_category}". Will attempt to use all matching websites.`,
+      "warning",
+    );
+    console.log(
+      `[${requestId}] Minimum include not specified. Using all matching websites.`,
+    );
   }
   if (info && info.websites && Array.isArray(info.websites)) {
-    availableWebsites = info.websites.filter(site => site.category === campaign_category && site.is_verified);
-    websocketLogger.log(requestId, `[Filtering] Found ${availableWebsites.length} verified websites matching category "${campaign_category}".`, 'info');
+    availableWebsites = info.websites.filter(
+      (site) => site.category === campaign_category && site.is_verified,
+    );
+    websocketLogger.log(
+      requestId,
+      `[Filtering] Found ${availableWebsites.length} verified websites matching category "${campaign_category}".`,
+      "info",
+    );
   } else {
-    websocketLogger.log(requestId, `[Filtering] No websites found in info.websites or info.websites is not an array.`, 'warning');
-    console.error(`[${requestId}] No websites found in info.websites or info.websites is not an array.`);
-    return { error: 'No websites provided in info.websites for publication.' };
+    websocketLogger.log(
+      requestId,
+      `[Filtering] No websites found in info.websites or info.websites is not an array.`,
+      "warning",
+    );
+    console.error(
+      `[${requestId}] No websites found in info.websites or info.websites is not an array.`,
+    );
+    return { error: "No websites provided in info.websites for publication." };
   }
-  console.log(`[${requestId}] Step 4: Validating credentials and selecting target websites.`);
-  const availableApiKeys = new Map((api_keys || []).map(key => [key.websiteUrl || key.url, key.credentials]));
+  console.log(
+    `[${requestId}] Step 4: Validating credentials and selecting target websites.`,
+  );
+  const availableApiKeys = new Map(
+    (api_keys || []).map((key) => [key.websiteUrl || key.url, key.credentials]),
+  );
   console.log(`[${requestId}] Available API Keys: ${availableApiKeys.size}`);
   const eligibleWebsites = [];
   for (const site of availableWebsites) {
@@ -131,11 +180,19 @@ async function processPublishJob(reqBody, requestId) {
           eligibleWebsites.push({ ...site, credentials });
         } else {
           skippedWebsites.push(site.url);
-          websocketLogger.log(requestId, `[Filtering] Skipping ${site.url} due to missing or empty credentials.`, 'warning');
+          websocketLogger.log(
+            requestId,
+            `[Filtering] Skipping ${site.url} due to missing or empty credentials.`,
+            "warning",
+          );
         }
       } else {
         skippedWebsites.push(site.url);
-        websocketLogger.log(requestId, `[Filtering] Skipping ${site.url} due to missing API key.`, 'warning');
+        websocketLogger.log(
+          requestId,
+          `[Filtering] Skipping ${site.url} due to missing API key.`,
+          "warning",
+        );
       }
     } else {
       eligibleWebsites.push(site);
@@ -143,44 +200,77 @@ async function processPublishJob(reqBody, requestId) {
   }
   if (eligibleWebsites.length === 0) {
     const errorMessage = `No verified and credentialed websites found for category '${campaign_category}'. Campaign not run.`;
-    websocketLogger.log(requestId, `❌ ${errorMessage}`, 'error');
+    websocketLogger.log(requestId, `❌ ${errorMessage}`, "error");
     console.error(`[${requestId}] ${errorMessage}`);
     return { error: errorMessage };
   }
   // Sort websites by score (highest first) for priority-based selection
   eligibleWebsites.sort((a, b) => {
-    const scoreA = a.score !== null && a.score !== undefined ? parseFloat(a.score) : -1;
-    const scoreB = b.score !== null && b.score !== undefined ? parseFloat(b.score) : -1;
+    const scoreA =
+      a.score !== null && a.score !== undefined ? parseFloat(a.score) : -1;
+    const scoreB =
+      b.score !== null && b.score !== undefined ? parseFloat(b.score) : -1;
     return scoreB - scoreA; // Descending order (highest score first)
   });
-  
-  console.log(`[${requestId}] Websites sorted by score (highest first):`, 
-    eligibleWebsites.map(site => ({ url: site.url, score: site.score })));
-  
+
+  console.log(
+    `[${requestId}] Websites sorted by score (highest first):`,
+    eligibleWebsites.map((site) => ({ url: site.url, score: site.score })),
+  );
+
   websites = eligibleWebsites;
-  console.log(`[${requestId}] Final eligible websites to process: ${websites.length}`);
-  user_id = info ? info.user_id : (credential ? credential.user_id : null);
-  campaign_id = info ? info.campaign_id : (credential ? credential.campaign_id : null);
-  console.log(`[${requestId}] User ID: ${user_id}, Campaign ID: ${campaign_id}`);
+  console.log(
+    `[${requestId}] Final eligible websites to process: ${websites.length}`,
+  );
+  user_id = info ? info.user_id : credential ? credential.user_id : null;
+  campaign_id = info
+    ? info.campaign_id
+    : credential
+      ? credential.campaign_id
+      : null;
+  console.log(
+    `[${requestId}] User ID: ${user_id}, Campaign ID: ${campaign_id}`,
+  );
   if (!user_id || !campaign_id) {
-    websocketLogger.log(requestId, `❌ Missing user_id or campaign_id. Cannot proceed with campaign update.`, 'error');
-    console.error(`[${requestId}] Missing user_id or campaign_id. Campaign update will be skipped.`);
+    websocketLogger.log(
+      requestId,
+      `❌ Missing user_id or campaign_id. Cannot proceed with campaign update.`,
+      "error",
+    );
+    console.error(
+      `[${requestId}] Missing user_id or campaign_id. Campaign update will be skipped.`,
+    );
   }
   // --- Title logic: prefer parsedContent.title if it exists and is non-empty ---
-  let finalTitle = title && title.trim() && title !== 'Untitled' ? title : (parsedContent.title && parsedContent.title.trim() ? parsedContent.title : 'Untitled');
+  let finalTitle =
+    title && title.trim() && title !== "Untitled"
+      ? title
+      : parsedContent.title && parsedContent.title.trim()
+        ? parsedContent.title
+        : "Untitled";
   workerContent = {
     title: finalTitle,
-    url: (info && info.user && info.user.public_website_1) ? info.user.public_website_1 : (parsedContent.url || ''),
-    tags: parsedContent.tags || '',
-    description: parsedContent.description || parsedContent.markdown || parsedContent.html || '',
-    markdown: parsedContent.markdown || '',
-    html: parsedContent.html || '',
-    body: parsedContent.markdown || parsedContent.html || '',
+    url:
+      info && info.user && info.user.public_website_1
+        ? info.user.public_website_1
+        : parsedContent.url || "",
+    tags: parsedContent.tags || "",
+    description:
+      parsedContent.description ||
+      parsedContent.markdown ||
+      parsedContent.html ||
+      "",
+    markdown: parsedContent.markdown || "",
+    html: parsedContent.html || "",
+    body: parsedContent.markdown || parsedContent.html || "",
     // Add user information for adapters that need it
-    email: (info && info.user && info.user.public_email_address) || (info && info.user_email) || '',
-    authorName: (info && info.user_name) || '',
-    category: campaign_category || '',
-    info: info // Include full info object for adapters that need more user details
+    email:
+      (info && info.user && info.user.public_email_address) ||
+      (info && info.user_email) ||
+      "",
+    authorName: (info && info.user_name) || "",
+    category: campaign_category || "",
+    info: info, // Include full info object for adapters that need more user details
   };
   // console.log(`[${requestId}] Worker Content: ${JSON.stringify(workerContent)}`);
   // Instead of spawning a worker, just return the job data (actual processing will be done by BullMQ worker)
@@ -190,7 +280,7 @@ async function processPublishJob(reqBody, requestId) {
     content: workerContent,
     campaignId: campaign_id,
     userId: user_id,
-    minimumInclude
+    minimumInclude,
   };
 }
 
@@ -201,43 +291,64 @@ export { queues, getQueueByCategory, categories, processPublishJob };
 export const publish = async (req, res) => {
   console.log("req.body in publish:", JSON.stringify(req.body));
   const requestId = uuidv4();
-  console.log("req. id to send:", requestId)
+  console.log("req. id to send:", requestId);
   // Add a job to BullMQ queue for each eligible website
   let originalCategory = req.body.category;
   if (!originalCategory && req.body.info && req.body.info.category) {
     originalCategory = req.body.info.category;
   }
-  if (!originalCategory && req.body.info && req.body.info.websites && req.body.info.websites[0] && req.body.info.websites[0].category) {
+  if (
+    !originalCategory &&
+    req.body.info &&
+    req.body.info.websites &&
+    req.body.info.websites[0] &&
+    req.body.info.websites[0].category
+  ) {
     originalCategory = req.body.info.websites[0].category;
   }
-  const normalizedCategory = (originalCategory || '').toLowerCase().trim();
-  console.log('[BullMQ] Submitting jobs with category:', originalCategory, 'normalized:', normalizedCategory);
+  const normalizedCategory = (originalCategory || "").toLowerCase().trim();
+  console.log(
+    "[BullMQ] Submitting jobs with category:",
+    originalCategory,
+    "normalized:",
+    normalizedCategory,
+  );
   const queue = getQueueByCategory(originalCategory);
 
   // Use processPublishJob to get eligible websites and job data
   const jobData = await processPublishJob(req.body, requestId);
-  if (jobData && jobData.websites && Array.isArray(jobData.websites) && jobData.websites.length > 0) {
+  if (
+    jobData &&
+    jobData.websites &&
+    Array.isArray(jobData.websites) &&
+    jobData.websites.length > 0
+  ) {
     const jobIds = [];
 
     // Create jobs and collect their IDs
     for (const website of jobData.websites) {
-      const job = await queue.add('publishWebsite', {
+      const job = await queue.add("publishWebsite", {
         requestId, // unique per job for traceability
         website,
         content: jobData.content,
         campaignId: jobData.campaignId,
         userId: jobData.userId,
-        minimumInclude: jobData.minimumInclude
+        minimumInclude: jobData.minimumInclude,
       });
       jobIds.push(job.id);
     }
 
     // Track campaign jobs and set total count if we have a campaign ID
     if (jobData.campaignId) {
-      console.log(`[${requestId}] Created and tracked ${jobIds.length} jobs for campaign ${jobData.campaignId}`);
+      console.log(
+        `[${requestId}] Created and tracked ${jobIds.length} jobs for campaign ${jobData.campaignId}`,
+      );
 
       // Set total count for the campaign
-      await redisClient.set(`campaign_total:${jobData.campaignId}`, jobIds.length);
+      await redisClient.set(
+        `campaign_total:${jobData.campaignId}`,
+        jobIds.length,
+      );
 
       // Track each job ID for this campaign
       for (const jobId of jobIds) {
@@ -247,11 +358,12 @@ export const publish = async (req, res) => {
 
     res.status(202).json({
       message: `Request received. ${jobData.websites.length} jobs queued (one per website).`,
-      requestId: requestId
+      requestId: requestId,
     });
   } else {
     // No eligible websites: push log to Redis using improved merge function
-    const campaign_id = jobData.campaignId || (req.body.info && req.body.info.campaign_id);
+    const campaign_id =
+      jobData.campaignId || (req.body.info && req.body.info.campaign_id);
     const user_id = jobData.userId || (req.body.info && req.body.info.user_id);
     if (campaign_id) {
       // Use the same improved merge logic as in publishWorker.js
@@ -263,7 +375,10 @@ export const publish = async (req, res) => {
         try {
           mergedLogs = JSON.parse(existingData);
         } catch (parseError) {
-          console.error(`[publishController] Error parsing existing data for campaign ${campaign_id}:`, parseError);
+          console.error(
+            `[publishController] Error parsing existing data for campaign ${campaign_id}:`,
+            parseError,
+          );
           mergedLogs = {};
         }
       }
@@ -279,22 +394,22 @@ export const publish = async (req, res) => {
 
       // Add error log
       mergedLogs.logs.uncategorized.logs.push({
-        message: jobData.error || 'No eligible websites found for publication.',
-        level: 'error',
-        timestamp: new Date().toISOString()
+        message: jobData.error || "No eligible websites found for publication.",
+        level: "error",
+        timestamp: new Date().toISOString(),
       });
 
       // Set counts to 0 since no websites were processed
       mergedLogs.successCount = 0;
       mergedLogs.totalCount = 0;
-      mergedLogs.logs.uncategorized.result = '0/0';
+      mergedLogs.logs.uncategorized.result = "0/0";
 
       // Store merged logs back to Redis
       await redisClient.set(key, JSON.stringify(mergedLogs));
     }
     res.status(400).json({
-      message: jobData.error || 'No eligible websites found for publication.',
-      requestId: requestId
+      message: jobData.error || "No eligible websites found for publication.",
+      requestId: requestId,
     });
   }
 };

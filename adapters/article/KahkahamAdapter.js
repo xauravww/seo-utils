@@ -115,7 +115,7 @@
 //      */
 //     async getDummyImage() {
 //         const imagePath = 'seo-utils/dummy.png';
-        
+
 //         // Verify the file exists
 //         try {
 //             fs.accessSync(imagePath, fs.constants.F_OK);
@@ -133,7 +133,7 @@
 //      */
 //     async generateFallbackImage() {
 //         const imagePath = `${this.requestId}-kahkaham-fallback.png`;
-        
+
 //         // Create a simple fallback image
 //         const canvas = document.createElement('canvas');
 //         canvas.width = 800;
@@ -828,10 +828,7 @@
 //     }
 // }
 
-// export default KahkahamAdapter;  
-
-
-
+// export default KahkahamAdapter;
 
 // import { chromium } from 'patchright';
 // import BaseAdapter from '../BaseAdapter.js';
@@ -928,7 +925,7 @@
 //      */
 //     async getDummyImage() {
 //         const imagePath = 'dummy.png';
-        
+
 //         try {
 //             fs.accessSync(imagePath, fs.constants.F_OK);
 //             this.log(`Using existing dummy image: ${imagePath}`, 'info', true);
@@ -946,7 +943,7 @@
 //      */
 //     async determineCategory(contentData) {
 //         try {
-//             const prompt = this.buildCategoryPrompt(contentData);
+//             const prompt = this.buildssCategoryPrompt(contentData);
 
 //             const response = await fetch('http://31.97.229.2:3009/v1/chat/completions', {
 //                 method: 'POST',
@@ -1078,12 +1075,12 @@
 //             await page.fill('#password', password);
 //             await page.click('button[type="submit"]');
 //             await page.waitForLoadState('networkidle');
-            
+
 //             if (page.url().includes('login')) {
 //                 throw new Error('Login failed - still on login page');
 //             }
 //             this.log('Login successful', 'info', true);
-            
+
 //             // Step 2: Navigate to create blog page
 //             await page.goto(this.createBlogUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
 //             if (!page.url().includes('create-blog')) {
@@ -1095,7 +1092,7 @@
 //             await page.waitForSelector('#blog_title', { timeout: 10000 });
 //             await page.fill('#blog_title', title);
 //             await page.fill('#new-blog-desc', description);
-            
+
 //             // Step 4: Select category
 //             const categoryId = await this.determineCategory(this.content);
 //             await page.selectOption('#blog_category', categoryId);
@@ -1107,7 +1104,7 @@
 //             const htmlContent = this.convertToHtml(content);
 //             await page.fill('textarea.mce-textbox', htmlContent);
 //             await page.click('button:has-text("Ok")');
-            
+
 //             // Step 7: Add tags
 //             const tags = this.generateTags();
 //             if (tags.length > 0) {
@@ -1137,7 +1134,7 @@
 //                 this.log(`Image handling failed: ${imageError.message}`, 'error', true);
 //                 throw new Error('Image selection failed, which is required for submission.');
 //             }
-            
+
 //             // Step 9: Submit the blog post
 //             this.log('Submitting blog post', 'detail', false);
 
@@ -1147,7 +1144,7 @@
 //             await publishButton.click();
 
 //             await page.waitForLoadState('networkidle', { timeout: 30000 });
-            
+
 //             // Finalization
 //             const finalUrl = page.url();
 //             let screenshotUrl = null;
@@ -1191,7 +1188,7 @@
 //             };
 //         } finally {
 //             if (browser) {
-//                 // await browser.close(); 
+//                 // await browser.close();
 //                 this.log('Browser left open for debugging', 'info', true);
 //             }
 //         }
@@ -1200,336 +1197,445 @@
 
 // export default KahkahamAdapter;
 
-
-
-
-import { chromium } from 'patchright';
-import BaseAdapter from '../BaseAdapter.js';
-import cloudinary from 'cloudinary';
-import fs from 'fs';
-import https from 'https';
-import { createCanvas } from 'canvas'; // <-- Added for image generation
+import { chromium } from "patchright";
+import BaseAdapter from "../BaseAdapter.js";
+import cloudinary from "cloudinary";
+import fs from "fs";
+import https from "https";
+import { createCanvas } from "canvas"; // <-- Added for image generation
 
 class KahkahamAdapter extends BaseAdapter {
-    constructor(jobDetails) {
-        super(jobDetails);
-        this.baseUrl = "https://kahkaham.net";
-        this.loginUrl = "https://kahkaham.net/";
-        this.createBlogUrl = "https://kahkaham.net/create-blog/";
+  constructor(jobDetails) {
+    super(jobDetails);
+    this.baseUrl = "https://kahkaham.net";
+    this.loginUrl = "https://kahkaham.net/";
+    this.createBlogUrl = "https://kahkaham.net/create-blog/";
 
-        // Category mapping for Kahkaham
-        this.categoryMapping = {
-            'Business': '4', 'Finance': '4', 'Technology': '16', 'Gaming': '8',
-            'Health': '10', 'Education': '5', 'Travel': '18', 'Lifestyle': '10',
-            'News': '12', 'Entertainment': '6', 'Sports': '17', 'Cars': '2',
-            'Movies': '7', 'Animals': '14', 'Comedy': '3', 'History': '9',
-            'Natural': '11', 'People': '13', 'Places': '15'
-        };
+    // Category mapping for Kahkaham
+    this.categoryMapping = {
+      Business: "4",
+      Finance: "4",
+      Technology: "16",
+      Gaming: "8",
+      Health: "10",
+      Education: "5",
+      Travel: "18",
+      Lifestyle: "10",
+      News: "12",
+      Entertainment: "6",
+      Sports: "17",
+      Cars: "2",
+      Movies: "7",
+      Animals: "14",
+      Comedy: "3",
+      History: "9",
+      Natural: "11",
+      People: "13",
+      Places: "15",
+    };
+  }
+
+  /**
+   * Clean description text and ensure minimum 32 characters
+   * @param {string} text - Raw description text
+   * @returns {string} - Cleaned description text
+   */
+  cleanDescriptionForKahkaham(text) {
+    if (!text || typeof text !== "string") {
+      return "This is an informative blog post sharing valuable insights and information for readers.";
     }
+    let cleaned = text.replace(/https?:\/\/[^\s]+/gi, "");
+    cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/gi, "$1");
+    cleaned = cleaned.replace(/[^\w\s.,!?;:()\-'"&]/gi, " ");
+    cleaned = cleaned.replace(/\s+/g, " ").trim();
+    if (cleaned.length < 32) {
+      cleaned +=
+        " This blog post provides valuable information and insights for readers interested in the topic.";
+    }
+    return cleaned;
+  }
 
-    /**
-     * Clean description text and ensure minimum 32 characters
-     * @param {string} text - Raw description text
-     * @returns {string} - Cleaned description text
-     */
-    cleanDescriptionForKahkaham(text) {
-        if (!text || typeof text !== 'string') {
-            return 'This is an informative blog post sharing valuable insights and information for readers.';
+  /**
+   * Convert markdown/text content to HTML, adding rel="dofollow" to links.
+   * @param {string} content - Raw content
+   * @returns {string} - HTML formatted content
+   */
+  convertToHtml(content) {
+    if (!content) return "<p>Content not available</p>";
+    let html = content;
+    html = html.replace(/^### (.*$)/gim, "<h3>$1</h3>");
+    html = html.replace(/^## (.*$)/gim, "<h2>$1</h2>");
+    html = html.replace(/^# (.*$)/gim, "<h1>$1</h1>");
+    html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
+    // Add rel="dofollow" to all generated links
+    html = html.replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      '<a href="$2" rel="dofollow">$1</a>',
+    );
+    const paragraphs = html.split("\n\n").filter((p) => p.trim());
+    html = paragraphs
+      .map((p) => {
+        if (
+          p.trim().startsWith("<h") ||
+          p.trim().startsWith("<ul") ||
+          p.trim().startsWith("<ol")
+        ) {
+          return p.trim();
         }
-        let cleaned = text.replace(/https?:\/\/[^\s]+/gi, '');
-        cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/gi, '$1');
-        cleaned = cleaned.replace(/[^\w\s.,!?;:()\-'"&]/gi, ' ');
-        cleaned = cleaned.replace(/\s+/g, ' ').trim();
-        if (cleaned.length < 32) {
-            cleaned += ' This blog post provides valuable information and insights for readers interested in the topic.';
+        return `<p>${p.trim()}</p>`;
+      })
+      .join("\n");
+    html = html.replace(/^\* (.+)$/gm, "<li>$1</li>");
+    html = html.replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>");
+    return html;
+  }
+
+  /**
+   * Generates a dynamic image based on the post title.
+   * @param {string} title - The title of the blog post.
+   * @returns {Promise<string>} - The file path of the generated image.
+   */
+  async generateDynamicImage(title) {
+    const imagePath = `${this.requestId}-kahkaham-image.png`;
+    const width = 800;
+    const height = 420; // 1.91:1 aspect ratio, common for social sharing
+
+    const canvas = createCanvas(width, height);
+    const context = canvas.getContext("2d");
+
+    // Create a pleasant gradient background
+    const gradient = context.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0, "#6a11cb");
+    gradient.addColorStop(1, "#2575fc");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, width, height);
+
+    // Add text styling
+    context.fillStyle = "white";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+
+    // Logic to fit title text nicely
+    let fontSize = 55;
+    context.font = `bold ${fontSize}px Arial`;
+    let textWidth = context.measureText(title).width;
+    // Reduce font size if title is too long
+    while (textWidth > width - 60 && fontSize > 20) {
+      fontSize -= 5;
+      context.font = `bold ${fontSize}px Arial`;
+      textWidth = context.measureText(title).width;
+    }
+
+    context.fillText(title, width / 2, height / 2);
+
+    // Save the image to a file
+    const buffer = canvas.toBuffer("image/png");
+    fs.writeFileSync(imagePath, buffer);
+    this.log(`Generated dynamic image for post: ${imagePath}`, "info", true);
+    return imagePath;
+  }
+
+  /**
+   * Determine category using LLM API
+   * @param {Object} contentData - Content data
+   * @returns {Promise<string>} - Category ID
+   */
+  async determineCategory(contentData) {
+    try {
+      const prompt = this.buildCategoryPrompt(contentData);
+      const response = await fetch(`${process.env.LLM_API_URL}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer no-key",
+        },
+        body: JSON.stringify({
+           model: "phi3:mini",
+          temperature: 0,
+          max_tokens: 30,
+          messages: [
+            {
+              role: "system",
+              content:
+                'You are a JSON-only generator. You must output ONLY a valid JSON array from this EXACT fixed list: ["Business", "Finance", "Technology", "Gaming", "Health", "Education", "Travel", "Lifestyle", "News", "Entertainment", "Sports", "Cars", "Movies", "Animals", "Comedy", "History", "Natural", "People", "Places"]. Example: ["Technology", "News"]. No explanations or additional text.',
+            },
+            { role: "user", content: prompt },
+          ],
+        }),
+      });
+      const data = await response.json();
+      let rawContent = data.choices[0].message.content
+        .replace(/<\|eot_id\|>/g, "")
+        .trim();
+      let categories = [];
+      try {
+        const jsonMatch = rawContent.match(/\[.*?\]/);
+        if (jsonMatch) categories = JSON.parse(jsonMatch[0]);
+      } catch (parseError) {
+        this.log(
+          `Failed to parse LLM response: ${parseError.message}`,
+          "warning",
+          true,
+        );
+      }
+      const primaryCategory =
+        categories.length > 0 ? categories[0] : "Technology";
+      const categoryId = this.categoryMapping[primaryCategory] || "16";
+      this.log(
+        `LLM determined category: ${primaryCategory} (ID: ${categoryId})`,
+        "info",
+        true,
+      );
+      return categoryId;
+    } catch (error) {
+      this.log(`Failed to determine category: ${error.message}`, "error", true);
+      return "16";
+    }
+  }
+
+  /**
+   * Build prompt for LLM category determination
+   * @param {Object} contentData - Content data
+   * @returns {string} - Formatted prompt
+   */
+  buildCategoryPrompt(contentData) {
+    const reqBody = this.job?.data?.reqBody || this.job?.data || {};
+    const userInfo = reqBody?.info?.user || {};
+    let prompt = "Categorize this content: ";
+    if (this.content.title) prompt += `Title: "${this.content.title}". `;
+    if (this.content.body || this.content.markdown) {
+      const content = this.content.body || this.content.markdown;
+      prompt += `Content: "${content.substring(0, 300)}...". `;
+    }
+    if (userInfo.business_categories?.length > 0) {
+      prompt += `Business categories: ${userInfo.business_categories.join(", ")}. `;
+    }
+    return prompt;
+  }
+
+  /**
+   * Generate relevant tags based on content and business info
+   * @returns {string[]} - Array of tags
+   */
+  generateTags() {
+    const tags = [];
+    const reqBody = this.job?.data?.reqBody || this.job?.data || {};
+    const userInfo = reqBody?.info?.user || {};
+    if (userInfo.business_categories?.length > 0) {
+      tags.push(
+        ...userInfo.business_categories.map((cat) => cat.toLowerCase()),
+      );
+    }
+    if (this.content.title) {
+      const titleWords = this.content.title
+        .toLowerCase()
+        .split(" ")
+        .filter(
+          (word) =>
+            word.length > 3 &&
+            ![
+              "this",
+              "that",
+              "with",
+              "from",
+              "they",
+              "have",
+              "been",
+              "will",
+              "your",
+              "what",
+              "when",
+              "where",
+              "how",
+            ].includes(word),
+        )
+        .slice(0, 3);
+      tags.push(...titleWords);
+    }
+    tags.push("blog", "article", "information", "insights");
+    return [...new Set(tags)].slice(0, 8);
+  }
+
+  async publish() {
+    let browser, page;
+    let imagePath = null; // <-- To track the generated image for cleanup
+
+    try {
+      this.log("Starting Kahkaham publication", "info", true);
+      browser = await chromium.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--start-maximized"],
+      });
+      page = await browser.newPage();
+
+      let username, password, title, content, description;
+      try {
+        if (
+          !this.website?.credentials?.username ||
+          !this.website?.credentials?.password
+        ) {
+          throw new Error("Username and password are required");
         }
-        return cleaned;
-    }
+        username = this.website.credentials.username;
+        password = this.website.credentials.password;
+        title = this.content.title || "Untitled Blog Post";
+        content =
+          this.content.body || this.content.html || this.content.markdown || "";
+        const rawDescription =
+          this.content.description || content.substring(0, 200);
+        description = this.cleanDescriptionForKahkaham(rawDescription);
+      } catch (extractError) {
+        throw new Error(`Failed to extract data: ${extractError.message}`);
+      }
 
-    /**
-     * Convert markdown/text content to HTML, adding rel="dofollow" to links.
-     * @param {string} content - Raw content
-     * @returns {string} - HTML formatted content
-     */
-    convertToHtml(content) {
-        if (!content) return '<p>Content not available</p>';
-        let html = content;
-        html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-        html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-        html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-        html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-        // Add rel="dofollow" to all generated links
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="dofollow">$1</a>');
-        const paragraphs = html.split('\n\n').filter(p => p.trim());
-        html = paragraphs.map(p => {
-            if (p.trim().startsWith('<h') || p.trim().startsWith('<ul') || p.trim().startsWith('<ol')) {
-                return p.trim();
-            }
-            return `<p>${p.trim()}</p>`;
-        }).join('\n');
-        html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
-        html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
-        return html;
-    }
+      // Step 1: Login
+      await page.goto(this.loginUrl, {
+        waitUntil: "networkidle",
+        timeout: 30000,
+      });
+      await page.waitForSelector("#login", { timeout: 10000 });
+      await page.fill("#username", username);
+      await page.fill("#password", password);
+      await page.click('button[type="submit"]');
+      await page.waitForLoadState("networkidle");
+      if (page.url().includes("login")) throw new Error("Login failed");
+      this.log("Login successful", "info", true);
 
-    /**
-     * Generates a dynamic image based on the post title.
-     * @param {string} title - The title of the blog post.
-     * @returns {Promise<string>} - The file path of the generated image.
-     */
-    async generateDynamicImage(title) {
-        const imagePath = `${this.requestId}-kahkaham-image.png`;
-        const width = 800;
-        const height = 420; // 1.91:1 aspect ratio, common for social sharing
+      // Step 2: Navigate to create blog page
+      await page.goto(this.createBlogUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 20000,
+      });
+      if (!page.url().includes("create-blog"))
+        throw new Error(
+          `Failed to navigate to create-blog page. URL: ${page.url()}`,
+        );
+      this.log("Successfully on create blog page", "info", true);
 
-        const canvas = createCanvas(width, height);
-        const context = canvas.getContext('2d');
+      // Step 3-7: Fill form details
+      await page.waitForSelector("#blog_title", { timeout: 10000 });
+      await page.fill("#blog_title", title);
+      await page.fill("#new-blog-desc", description);
+      const categoryId = await this.determineCategory(this.content);
+      await page.selectOption("#blog_category", categoryId);
+      await page.click('button:has-text("Tools")');
+      await page.click('text="Source code"');
+      await page.waitForSelector("textarea.mce-textbox", { timeout: 5000 });
+      const htmlContent = this.convertToHtml(content);
+      await page.fill("textarea.mce-textbox", htmlContent);
+      await page.click('button:has-text("Ok")');
+      const tags = this.generateTags();
+      if (tags.length > 0) {
+        await page.evaluate(() => {
+          const hiddenInput = document.querySelector("#blog_tags");
+          if (hiddenInput) {
+            hiddenInput.style.display = "block";
+            hiddenInput.style.visibility = "visible";
+          }
+        });
+        await page.fill("#blog_tags", tags.join(","));
+        this.log(`Added tags: ${tags.join(",")}`, "info", true);
+      }
 
-        // Create a pleasant gradient background
-        const gradient = context.createLinearGradient(0, 0, width, height);
-        gradient.addColorStop(0, '#6a11cb');
-        gradient.addColorStop(1, '#2575fc');
-        context.fillStyle = gradient;
-        context.fillRect(0, 0, width, height);
-
-        // Add text styling
-        context.fillStyle = 'white';
-        context.textAlign = 'center';
-        context.textBaseline = 'middle';
-
-        // Logic to fit title text nicely
-        let fontSize = 55;
-        context.font = `bold ${fontSize}px Arial`;
-        let textWidth = context.measureText(title).width;
-        // Reduce font size if title is too long
-        while (textWidth > width - 60 && fontSize > 20) {
-            fontSize -= 5;
-            context.font = `bold ${fontSize}px Arial`;
-            textWidth = context.measureText(title).width;
+      // Step 8: Generate and select dynamic image
+      try {
+        imagePath = await this.generateDynamicImage(title); // <-- Generate and store path
+        const fileInput = await page.$("#thumbnail");
+        if (fileInput) {
+          await fileInput.setInputFiles(imagePath);
+          this.log("Dynamic image file selected for upload", "info", true);
+        } else {
+          this.log(
+            "Thumbnail input not found, skipping image upload",
+            "warning",
+            true,
+          );
         }
+      } catch (imageError) {
+        throw new Error(
+          `Image generation/selection failed: ${imageError.message}`,
+        );
+      }
 
-        context.fillText(title, width / 2, height / 2);
+      // Step 9: Submit the blog post
+      this.log("Submitting blog post", "detail", false);
+      const publishButton = page.getByRole("button", { name: "Publish" });
+      await publishButton.waitFor({ state: "visible", timeout: 10000 });
+      await publishButton.scrollIntoViewIfNeeded();
+      await publishButton.click();
+      await page.waitForLoadState("networkidle", { timeout: 30000 });
 
-        // Save the image to a file
-        const buffer = canvas.toBuffer('image/png');
-        fs.writeFileSync(imagePath, buffer);
-        this.log(`Generated dynamic image for post: ${imagePath}`, 'info', true);
-        return imagePath;
-    }
+      // Finalization
+      const finalUrl = page.url();
+      let screenshotUrl = null;
+      try {
+        const screenshotPath = `${this.requestId}-kahkaham-screenshot.png`;
+        await page.screenshot({ path: screenshotPath, fullPage: true });
+        const cloudinaryResult =
+          await cloudinary.uploader.upload(screenshotPath);
+        fs.unlinkSync(screenshotPath);
+        screenshotUrl = cloudinaryResult.secure_url;
+        this.logScreenshotUploaded(screenshotUrl);
+      } catch (screenshotError) {
+        this.log(
+          `Warning: Could not take screenshot: ${screenshotError.message}`,
+          "warning",
+          true,
+        );
+      }
 
-    /**
-     * Determine category using LLM API
-     * @param {Object} contentData - Content data
-     * @returns {Promise<string>} - Category ID
-     */
-    async determineCategory(contentData) {
+      this.log("Blog post submitted successfully", "info", true);
+      this.logPublicationSuccess(finalUrl);
+      return { success: true, postUrl: finalUrl, screenshotUrl: screenshotUrl };
+    } catch (error) {
+      this.log(`Kahkaham publication failed: ${error.message}`, "error", true);
+      if (page) {
         try {
-            const prompt = this.buildCategoryPrompt(contentData);
-            const response = await fetch('http://31.97.229.2:3009/v1/chat/completions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer no-key' },
-                body: JSON.stringify({
-                    model: 'Meta-Llama-3.1-8B-Instruct.Q6_K.gguf',
-                    temperature: 0,
-                    max_tokens: 30,
-                    messages: [
-                        { role: 'system', content: 'You are a JSON-only generator. You must output ONLY a valid JSON array from this EXACT fixed list: ["Business", "Finance", "Technology", "Gaming", "Health", "Education", "Travel", "Lifestyle", "News", "Entertainment", "Sports", "Cars", "Movies", "Animals", "Comedy", "History", "Natural", "People", "Places"]. Example: ["Technology", "News"]. No explanations or additional text.' },
-                        { role: 'user', content: prompt }
-                    ]
-                })
-            });
-            const data = await response.json();
-            let rawContent = data.choices[0].message.content.replace(/<\|eot_id\|>/g, '').trim();
-            let categories = [];
-            try {
-                const jsonMatch = rawContent.match(/\[.*?\]/);
-                if (jsonMatch) categories = JSON.parse(jsonMatch[0]);
-            } catch (parseError) {
-                this.log(`Failed to parse LLM response: ${parseError.message}`, 'warning', true);
-            }
-            const primaryCategory = categories.length > 0 ? categories[0] : 'Technology';
-            const categoryId = this.categoryMapping[primaryCategory] || '16';
-            this.log(`LLM determined category: ${primaryCategory} (ID: ${categoryId})`, 'info', true);
-            return categoryId;
-        } catch (error) {
-            this.log(`Failed to determine category: ${error.message}`, 'error', true);
-            return '16';
+          const errorScreenshotPath = `${this.requestId}-kahkaham-error.png`;
+          await page.screenshot({ path: errorScreenshotPath, fullPage: true });
+          const errorCloudinaryResult =
+            await cloudinary.uploader.upload(errorScreenshotPath);
+          fs.unlinkSync(errorScreenshotPath);
+          this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
+        } catch (screenshotError) {
+          this.log(
+            `Could not take error screenshot: ${screenshotError.message}`,
+            "warning",
+            true,
+          );
         }
-    }
-
-    /**
-     * Build prompt for LLM category determination
-     * @param {Object} contentData - Content data
-     * @returns {string} - Formatted prompt
-     */
-    buildCategoryPrompt(contentData) {
-        const reqBody = this.job?.data?.reqBody || this.job?.data || {};
-        const userInfo = reqBody?.info?.user || {};
-        let prompt = 'Categorize this content: ';
-        if (this.content.title) prompt += `Title: "${this.content.title}". `;
-        if (this.content.body || this.content.markdown) {
-            const content = this.content.body || this.content.markdown;
-            prompt += `Content: "${content.substring(0, 300)}...". `;
-        }
-        if (userInfo.business_categories?.length > 0) {
-            prompt += `Business categories: ${userInfo.business_categories.join(', ')}. `;
-        }
-        return prompt;
-    }
-
-    /**
-     * Generate relevant tags based on content and business info
-     * @returns {string[]} - Array of tags
-     */
-    generateTags() {
-        const tags = [];
-        const reqBody = this.job?.data?.reqBody || this.job?.data || {};
-        const userInfo = reqBody?.info?.user || {};
-        if (userInfo.business_categories?.length > 0) {
-            tags.push(...userInfo.business_categories.map(cat => cat.toLowerCase()));
-        }
-        if (this.content.title) {
-            const titleWords = this.content.title.toLowerCase().split(' ')
-                .filter(word => word.length > 3 && !['this', 'that', 'with', 'from', 'they', 'have', 'been', 'will', 'your', 'what', 'when', 'where', 'how'].includes(word))
-                .slice(0, 3);
-            tags.push(...titleWords);
-        }
-        tags.push('blog', 'article', 'information', 'insights');
-        return [...new Set(tags)].slice(0, 8);
-    }
-
-    async publish() {
-        let browser, page;
-        let imagePath = null; // <-- To track the generated image for cleanup
-
+      }
+      return {
+        success: false,
+        error: error.message,
+        postUrl: null,
+        screenshotUrl: null,
+      };
+    } finally {
+      // **AUTOMATIC CLEANUP**
+      if (imagePath && fs.existsSync(imagePath)) {
         try {
-            this.log('Starting Kahkaham publication', 'info', true);
-            browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--start-maximized'] });
-            page = await browser.newPage();
-
-            let username, password, title, content, description;
-            try {
-                if (!this.website?.credentials?.username || !this.website?.credentials?.password) {
-                    throw new Error('Username and password are required');
-                }
-                username = this.website.credentials.username;
-                password = this.website.credentials.password;
-                title = this.content.title || 'Untitled Blog Post';
-                content = this.content.body || this.content.html || this.content.markdown || '';
-                const rawDescription = this.content.description || content.substring(0, 200);
-                description = this.cleanDescriptionForKahkaham(rawDescription);
-            } catch (extractError) {
-                throw new Error(`Failed to extract data: ${extractError.message}`);
-            }
-
-            // Step 1: Login
-            await page.goto(this.loginUrl, { waitUntil: 'networkidle', timeout: 30000 });
-            await page.waitForSelector('#login', { timeout: 10000 });
-            await page.fill('#username', username);
-            await page.fill('#password', password);
-            await page.click('button[type="submit"]');
-            await page.waitForLoadState('networkidle');
-            if (page.url().includes('login')) throw new Error('Login failed');
-            this.log('Login successful', 'info', true);
-            
-            // Step 2: Navigate to create blog page
-            await page.goto(this.createBlogUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-            if (!page.url().includes('create-blog')) throw new Error(`Failed to navigate to create-blog page. URL: ${page.url()}`);
-            this.log('Successfully on create blog page', 'info', true);
-
-            // Step 3-7: Fill form details
-            await page.waitForSelector('#blog_title', { timeout: 10000 });
-            await page.fill('#blog_title', title);
-            await page.fill('#new-blog-desc', description);
-            const categoryId = await this.determineCategory(this.content);
-            await page.selectOption('#blog_category', categoryId);
-            await page.click('button:has-text("Tools")');
-            await page.click('text="Source code"');
-            await page.waitForSelector('textarea.mce-textbox', { timeout: 5000 });
-            const htmlContent = this.convertToHtml(content);
-            await page.fill('textarea.mce-textbox', htmlContent);
-            await page.click('button:has-text("Ok")');
-            const tags = this.generateTags();
-            if (tags.length > 0) {
-                await page.evaluate(() => {
-                    const hiddenInput = document.querySelector('#blog_tags');
-                    if (hiddenInput) { hiddenInput.style.display = 'block'; hiddenInput.style.visibility = 'visible'; }
-                });
-                await page.fill('#blog_tags', tags.join(','));
-                this.log(`Added tags: ${tags.join(',')}`, 'info', true);
-            }
-
-            // Step 8: Generate and select dynamic image
-            try {
-                imagePath = await this.generateDynamicImage(title); // <-- Generate and store path
-                const fileInput = await page.$('#thumbnail');
-                if (fileInput) {
-                    await fileInput.setInputFiles(imagePath);
-                    this.log('Dynamic image file selected for upload', 'info', true);
-                } else {
-                    this.log('Thumbnail input not found, skipping image upload', 'warning', true);
-                }
-            } catch (imageError) {
-                throw new Error(`Image generation/selection failed: ${imageError.message}`);
-            }
-            
-            // Step 9: Submit the blog post
-            this.log('Submitting blog post', 'detail', false);
-            const publishButton = page.getByRole('button', { name: 'Publish' });
-            await publishButton.waitFor({ state: 'visible', timeout: 10000 });
-            await publishButton.scrollIntoViewIfNeeded();
-            await publishButton.click();
-            await page.waitForLoadState('networkidle', { timeout: 30000 });
-            
-            // Finalization
-            const finalUrl = page.url();
-            let screenshotUrl = null;
-            try {
-                const screenshotPath = `${this.requestId}-kahkaham-screenshot.png`;
-                await page.screenshot({ path: screenshotPath, fullPage: true });
-                const cloudinaryResult = await cloudinary.uploader.upload(screenshotPath);
-                fs.unlinkSync(screenshotPath);
-                screenshotUrl = cloudinaryResult.secure_url;
-                this.logScreenshotUploaded(screenshotUrl);
-            } catch (screenshotError) {
-                this.log(`Warning: Could not take screenshot: ${screenshotError.message}`, 'warning', true);
-            }
-
-            this.log('Blog post submitted successfully', 'info', true);
-            this.logPublicationSuccess(finalUrl);
-            return { success: true, postUrl: finalUrl, screenshotUrl: screenshotUrl };
-
-        } catch (error) {
-            this.log(`Kahkaham publication failed: ${error.message}`, 'error', true);
-            if (page) {
-                try {
-                    const errorScreenshotPath = `${this.requestId}-kahkaham-error.png`;
-                    await page.screenshot({ path: errorScreenshotPath, fullPage: true });
-                    const errorCloudinaryResult = await cloudinary.uploader.upload(errorScreenshotPath);
-                    fs.unlinkSync(errorScreenshotPath);
-                    this.logErrorScreenshotUploaded(errorCloudinaryResult.secure_url);
-                } catch (screenshotError) {
-                    this.log(`Could not take error screenshot: ${screenshotError.message}`, 'warning', true);
-                }
-            }
-            return { success: false, error: error.message, postUrl: null, screenshotUrl: null };
-        } finally {
-            // **AUTOMATIC CLEANUP**
-            if (imagePath && fs.existsSync(imagePath)) {
-                try {
-                    fs.unlinkSync(imagePath);
-                    this.log(`Successfully cleaned up generated image: ${imagePath}`, 'info', true);
-                } catch (cleanupError) {
-                    this.log(`Failed to clean up image file ${imagePath}: ${cleanupError.message}`, 'warning', true);
-                }
-            }
-            if (browser) {
-                await browser.close(); 
-                this.log('Browser left open for debugging', 'info', true);
-            }
+          fs.unlinkSync(imagePath);
+          this.log(
+            `Successfully cleaned up generated image: ${imagePath}`,
+            "info",
+            true,
+          );
+        } catch (cleanupError) {
+          this.log(
+            `Failed to clean up image file ${imagePath}: ${cleanupError.message}`,
+            "warning",
+            true,
+          );
         }
+      }
+      if (browser) {
+        await browser.close();
+        this.log("Browser left open for debugging", "info", true);
+      }
     }
+  }
 }
 
 export default KahkahamAdapter;

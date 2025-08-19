@@ -116,14 +116,14 @@ class DiigoForumsAdapter extends BaseAdapter {
         try {
             const prompt = this.buildCategoryPrompt(contentData);
             console.log("prompt: ", prompt)
-            const response = await fetch('http://31.97.229.2:3009/v1/chat/completions', {
+            const response = await fetch(`${process.env.LLM_API_URL}, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer no-key'
                 },
                 body: JSON.stringify({
-                    model: 'Meta-Llama-3.1-8B-Instruct.Q6_K.gguf',
+                     model: "phi3:mini",
                     temperature: 0,
                     max_tokens: 30,
                     messages: [
