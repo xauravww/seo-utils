@@ -455,6 +455,46 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
           attemptKeys: Object.keys(mergedLogs.attempts || {}),
           resultKeys: Object.keys(mergedLogs.results || {}),
         });
+
+        // Fallback: if Redis entry exists but has no logs (stale/cleaned), rehydrate from DB
+        if (!mergedLogs.logs || Object.keys(mergedLogs.logs).length === 0) {
+          console.log(
+            `[mergeCampaignLogs] Redis entry has no logs. Falling back to database rehydration for campaign ${campaignId}`,
+          );
+          try {
+            const axios = (await import("axios")).default;
+            const authToken = process.env.UTIL_TOKEN;
+            const apiUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaignId}`;
+            const dbResponse = await axios.get(apiUrl, {
+              headers: { accept: "application/json", "x-util-secret": authToken },
+            });
+            if (dbResponse.status === 200 && dbResponse.data && dbResponse.data.logs) {
+              const dbData = dbResponse.data;
+              mergedLogs = {
+                userId: newLogData.userId,
+                logs: {},
+                attempts: {},
+                results: {},
+                createdAt: dbData.created_at,
+                lastUpdated: new Date().toISOString(),
+                prevStatus: dbData.status,
+              };
+              for (const [category, logData] of Object.entries(dbData.logs)) {
+                try {
+                  const parsedLogData = parseDbLogData(logData, category, dbData.updated_at);
+                  if (!parsedLogData.logs || !Array.isArray(parsedLogData.logs)) {
+                    parsedLogData.logs = [];
+                  }
+                  mergedLogs.logs[category] = { logs: parsedLogData.logs, result: parsedLogData.result };
+                } catch (e) {
+                  console.error(`[mergeCampaignLogs] DB rehydration parse error for ${category}:`, e);
+                }
+              }
+            }
+          } catch (rehydrateErr) {
+            console.error(`[mergeCampaignLogs] DB rehydration failed:`, rehydrateErr);
+          }
+        }
       } catch (parseError) {
         console.error(
           `[mergeCampaignLogs] Error parsing existing Redis data for campaign ${campaignId}:`,
@@ -530,37 +570,68 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
                   parsedLogData.logs = [];
                 }
 
-                mergedLogs.logs[category] = { logs: parsedLogData.logs };
+                mergedLogs.logs[category] = { logs: parsedLogData.logs, result: parsedLogData.result };
 
-                // Reconstruct attempts and results from existing logs
-                const websiteKey = `${newLogData.website}_${category}`;
-                mergedLogs.attempts[websiteKey] = [
-                  {
-                    timestamp: parsedLogData.timestamp || dbData.updated_at,
-                    result:
-                      parsedLogData.result === "1/1" ||
-                      parsedLogData.result === "1/0"
-                        ? "success"
-                        : "failure",
-                    logs: parsedLogData.logs || [],
+                // Reconstruct minimal results for aggregation
+                if (category === 'linked_comment') {
+                  // Seed placeholder successes from stored X/Y result so retries don't reset counts
+                  const m = (parsedLogData.result || '').match(/^(\d+)\/(\d+)$/);
+                  if (m) {
+                    const priorSuccess = parseInt(m[1], 10) || 0;
+                    const priorTotal = parseInt(m[2], 10) || 0;
+                    if (!Number.isNaN(priorTotal) && priorTotal > 0) {
+                      mergedLogs.linkedTarget = priorTotal;
+                    }
+                    for (let i = 1; i <= priorSuccess; i++) {
+                      const seedKey = `seed_${category}_${i}`;
+                      mergedLogs.attempts[seedKey] = [
+                        {
+                          timestamp: parsedLogData.timestamp || dbData.updated_at,
+                          result: 'success',
+                          logs: [],
+                          website: 'seed',
+                          attemptNumber: 1,
+                          isRetry: false,
+                        },
+                      ];
+                      mergedLogs.results[seedKey] = {
+                        website: 'seed',
+                        category: category,
+                        finalResult: 'success',
+                        lastAttempt: parsedLogData.timestamp || dbData.updated_at,
+                        totalAttempts: 1,
+                        isRetry: false,
+                      };
+                    }
+                  }
+                } else {
+                  const websiteKey = `${newLogData.website}_${category}`;
+                  mergedLogs.attempts[websiteKey] = [
+                    {
+                      timestamp: parsedLogData.timestamp || dbData.updated_at,
+                      result:
+                        parsedLogData.result === '1/1' || parsedLogData.result === '1/0'
+                          ? 'success'
+                          : 'failure',
+                      logs: parsedLogData.logs || [],
+                      website: newLogData.website,
+                      attemptNumber: parsedLogData.totalAttempts || 1,
+                      isRetry: parsedLogData.isRetry || false,
+                    },
+                  ];
+
+                  mergedLogs.results[websiteKey] = {
                     website: newLogData.website,
-                    attemptNumber: parsedLogData.totalAttempts || 1,
-                    isRetry: parsedLogData.isRetry || false,
-                  },
-                ];
-
-                mergedLogs.results[websiteKey] = {
-                  website: newLogData.website,
-                  category: category,
-                  finalResult:
-                    parsedLogData.result === "1/1" ||
-                    parsedLogData.result === "1/0"
-                      ? "success"
-                      : "failure",
-                  lastAttempt: parsedLogData.timestamp || dbData.updated_at,
-                  totalAttempts: parsedLogData.totalAttempts || 1,
-                  isRetry: false,
-                };
+                    category: category,
+                    finalResult:
+                      parsedLogData.result === '1/1' || parsedLogData.result === '1/0'
+                        ? 'success'
+                        : 'failure',
+                    lastAttempt: parsedLogData.timestamp || dbData.updated_at,
+                    totalAttempts: parsedLogData.totalAttempts || 1,
+                    isRetry: false,
+                  };
+                }
 
                 console.log(
                   `[mergeCampaignLogs] Successfully processed category ${category} with ${parsedLogData.logs.length} logs`,
@@ -703,19 +774,29 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
 
     mergedLogs.attempts[websiteKey].push(attemptData);
 
-    // Update the final result for this website (latest attempt wins)
+    // Update the final result for this website unit
+    const prevUnit = mergedLogs.results[websiteKey];
+    const nextFinal = prevUnit && prevUnit.finalResult === 'success' ? 'success' : newLogData.result;
     mergedLogs.results[websiteKey] = {
       website: newLogData.website,
       category: newLogData.category,
-      finalResult: newLogData.result,
+      finalResult: nextFinal,
       lastAttempt: new Date().toISOString(),
       totalAttempts: mergedLogs.attempts[websiteKey].length,
       isRetry: isRetry,
     };
 
+    // Persist linkedTarget if provided for linked_comment
+    if (newLogData.category === 'linked_comment') {
+      if (typeof newLogData.linkedTarget === 'number' && !Number.isNaN(newLogData.linkedTarget)) {
+        mergedLogs.linkedTarget = newLogData.linkedTarget;
+      }
+    }
+
     // Add logs to category (append all logs for visibility, with retry markers)
     const logsToAdd = newLogData.logs.map((log) => ({
       ...log,
+      category: log.category || newLogData.category,
       attemptNumber: existingAttempts + 1,
       isRetry: isRetry,
       timestamp: log.timestamp || new Date().toISOString(),
@@ -725,13 +806,24 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
 
     // Calculate statistics with special handling for linked_comment
     const uniqueKeys = Object.keys(mergedLogs.results);
+    let categoryWebsites = [];
+    let categorySuccesses = [];
 
     if (newLogData.category === 'linked_comment') {
-      const successUnits = uniqueKeys.filter(
+      // Count only linked_comment units
+      const unitKeys = uniqueKeys.filter(k => mergedLogs.results[k].category === 'linked_comment');
+      const successUnits = unitKeys.filter(
         (k) => mergedLogs.results[k].finalResult === 'success'
       ).length;
-      // Use target from request if provided; fallback to number of keys
-      const targetUnits = Number(newLogData.linkedTarget) || uniqueKeys.length;
+      // Use the most reliable denominator available and never allow 0
+      let prevStoredTotal = 0;
+      try {
+        const stored = mergedLogs.logs?.['linked_comment']?.result;
+        const m = stored ? String(stored).match(/^(\d+)\/(\d+)$/) : null;
+        if (m) prevStoredTotal = parseInt(m[2], 10) || 0;
+      } catch {}
+      const rawTarget = Number(mergedLogs.linkedTarget) || Number(newLogData.linkedTarget) || prevStoredTotal || unitKeys.length;
+      const targetUnits = Math.max(rawTarget, unitKeys.length, 1);
       mergedLogs.successCount = successUnits;
       mergedLogs.totalCount = targetUnits;
       mergedLogs.logs[newLogData.category].result = `${successUnits}/${targetUnits}`;
@@ -742,10 +834,10 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
       mergedLogs.successCount = successfulWebsites.length;
       mergedLogs.totalCount = uniqueKeys.length;
 
-      const categoryWebsites = uniqueKeys.filter(
+      categoryWebsites = uniqueKeys.filter(
         (key) => mergedLogs.results[key].category === newLogData.category,
       );
-      const categorySuccesses = categoryWebsites.filter(
+      categorySuccesses = categoryWebsites.filter(
         (key) => mergedLogs.results[key].finalResult === 'success',
       );
       mergedLogs.logs[newLogData.category].result = `${categorySuccesses.length}/${categoryWebsites.length}`;
@@ -769,7 +861,7 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
 
     await connection.unwatch();
     console.log(
-      `[mergeCampaignLogs] Successfully merged logs for campaign ${campaignId}, website ${newLogData.website}. Overall: ${mergedLogs.successCount}/${mergedLogs.totalCount}, Category ${newLogData.category}: ${categorySuccesses.length}/${categoryWebsites.length}`,
+      `[mergeCampaignLogs] Successfully merged logs for campaign ${campaignId}, website ${newLogData.website}. Overall: ${mergedLogs.successCount}/${mergedLogs.totalCount}, Category ${newLogData.category}: ${categorySuccesses.length || 0}/${categoryWebsites.length || 0}`,
     );
 
     // NUCLEAR APPROACH: ALWAYS update database directly and set flag to prevent queue handler override
@@ -794,18 +886,48 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
       const authToken = process.env.UTIL_TOKEN;
       const apiUrl = `${process.env.MAIN_BACKEND_URL}/api/v1/campaigns/${campaignId}`;
 
-      // Prepare database-compatible logs format
+      // Prepare database-compatible logs format with MERGE (do not overwrite)
       const dbLogs = {};
-      for (const [category, categoryData] of Object.entries(mergedLogs.logs)) {
+      let existingDbLogs = {};
+      try {
+        const getResp = await axios.get(apiUrl, {
+          headers: { accept: "application/json", "x-util-secret": authToken },
+        });
+        if (getResp.status === 200 && getResp.data && getResp.data.logs) {
+          existingDbLogs = getResp.data.logs || {};
+        }
+      } catch (e) {
+        console.warn(`[mergeCampaignLogs] Could not fetch existing DB logs for merge: ${e.message}`);
+      }
+
+      const categorySet = new Set([
+        ...Object.keys(existingDbLogs || {}),
+        ...Object.keys(mergedLogs.logs || {}),
+      ]);
+
+      for (const category of categorySet) {
+        const newData = mergedLogs.logs[category];
+        const prevRaw = existingDbLogs ? existingDbLogs[category] : null;
+        let prevParsed = { logs: [], result: "", timestamp: mergedLogs.lastUpdated, totalAttempts: 0, isRetry: false };
+        try {
+          if (prevRaw != null) {
+            prevParsed = parseDbLogData(prevRaw, category, mergedLogs.lastUpdated);
+          }
+        } catch {}
+
+        const combinedLogs = [
+          ...(Array.isArray(prevParsed.logs) ? prevParsed.logs : []),
+          ...(newData && Array.isArray(newData.logs) ? newData.logs : []),
+        ];
+
+        // Prefer freshly computed result if available; otherwise keep previous
+        const categoryResult = (newData && newData.result) ? newData.result : (prevParsed.result || "");
+
         dbLogs[category] = JSON.stringify({
-          logs: categoryData.logs,
-          result: categoryData.result,
+          logs: combinedLogs,
+          result: categoryResult,
           timestamp: mergedLogs.lastUpdated,
-          totalAttempts: Object.values(mergedLogs.attempts).filter((attempts) =>
-            attempts.some((attempt) =>
-              attempt.logs.some((log) => log.message.includes(category)),
-            ),
-          ).length,
+          totalAttempts: (prevParsed.totalAttempts || 0) + (newData ? 1 : 0),
           isRetry: true,
         });
       }
@@ -816,7 +938,8 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
       const overallStatus = (prev === 'completed' || mergedLogs.successCount > 0)
         ? 'completed'
         : 'failed';
-      const overallResult = `${mergedLogs.successCount}/${mergedLogs.totalCount}`;
+      const safeTotal = Math.max(mergedLogs.totalCount || 0, mergedLogs.successCount || 0);
+      const overallResult = `${mergedLogs.successCount || 0}/${safeTotal}`;
 
       const updatePayload = {
         user_id: newLogData.userId,

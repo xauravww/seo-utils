@@ -637,6 +637,8 @@ class LinkedInCommentAdapter extends BaseAdapter {
 
       for (const post of latestPosts) {
         let commentText = ""; // Declare commentText here to be available in the catch block
+        // Lock key per user/post-urn to avoid concurrent duplicate comments
+        const lockKey = `li_comment_lock:${userId}:${post.backend_urn}`;
         try {
           const hasCommented = await this.hasUserCommented(
             userId,
@@ -651,10 +653,27 @@ class LinkedInCommentAdapter extends BaseAdapter {
           }
 
           // Acquire a short-lived lock to prevent two concurrent jobs from picking the same post
-          const lockKey = `li_comment_lock:${userId}:${post.backend_urn}`;
           const gotLock = await this.acquireLock(lockKey, 120);
           if (!gotLock) {
             this.log(`Post ${post.backend_urn} is locked by another job. Skipping.`, "detail");
+            continue;
+          }
+
+          // Extra duplicate safety: if already commented on any equivalent URN or URL, skip
+          const candidateUrns = [post.backend_urn];
+          if (post.share_url) {
+            const m = post.share_url.match(/urn:li:(?:ugcPost|groupPost|activity):\d+/);
+            if (m && !candidateUrns.includes(m[0])) candidateUrns.push(m[0]);
+          }
+          if (await this.hasUserCommentedByAnyUrn(userId, candidateUrns)) {
+            this.log(`Already commented on equivalent URN for post ${post.backend_urn}. Skipping.`, "detail");
+            await this.releaseLock(lockKey);
+            continue;
+          }
+          const primaryUrl = `https://www.linkedin.com/feed/update/${post.backend_urn}/`;
+          if (await this.hasUserCommentedByUrl(userId, primaryUrl) || (post.share_url && await this.hasUserCommentedByUrl(userId, post.share_url))) {
+            this.log(`Already commented on same URL for post ${post.backend_urn}. Skipping.`, "detail");
+            await this.releaseLock(lockKey);
             continue;
           }
 
@@ -819,7 +838,7 @@ class LinkedInCommentAdapter extends BaseAdapter {
         "info",
         true,
       );
-      return { success: true, message: "No new posts to comment on." };
+      return { success: false, error: "No eligible posts to comment on." };
     } catch (error) {
       this.log(
         `LinkedIn comment publication failed: ${error.message}`,
@@ -939,11 +958,20 @@ class LinkedInCommentAdapter extends BaseAdapter {
   }
 
   async hasUserCommented(userId, postId) {
-    const existingComment = await LinkedInComment.findOne({
-      userId,
-      postId,
-    }).lean();
+    const existingComment = await LinkedInComment.findOne({ userId, postId }).lean();
     return !!existingComment;
+  }
+
+  async hasUserCommentedByUrl(userId, postedUrl) {
+    if (!postedUrl) return false;
+    const existing = await LinkedInComment.findOne({ userId, postedUrl }).lean();
+    return !!existing;
+  }
+
+  async hasUserCommentedByAnyUrn(userId, urns = []) {
+    if (!Array.isArray(urns) || urns.length === 0) return false;
+    const existing = await LinkedInComment.findOne({ userId, postId: { $in: urns } }).lean();
+    return !!existing;
   }
 
   async saveComment(commentData) {
