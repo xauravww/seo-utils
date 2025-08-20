@@ -326,16 +326,39 @@ export const publish = async (req, res) => {
     const jobIds = [];
 
     // Create jobs and collect their IDs
-    for (const website of jobData.websites) {
-      const job = await queue.add("publishWebsite", {
-        requestId, // unique per job for traceability
-        website,
-        content: jobData.content,
-        campaignId: jobData.campaignId,
-        userId: jobData.userId,
-        minimumInclude: jobData.minimumInclude,
-      });
-      jobIds.push(job.id);
+    const normalizedCategory = (originalCategory || "").toLowerCase().trim();
+    const isLinkedComment = normalizedCategory === 'linked_comment';
+    const minInclude = Number(jobData.minimumInclude) || 0;
+
+    if (isLinkedComment && minInclude > 0) {
+      const website = jobData.websites[0]; // only 1 website for linked_comment
+      for (let i = 1; i <= minInclude; i++) {
+        const job = await queue.add("publishWebsite", {
+          requestId,
+          website,
+          content: jobData.content,
+          campaignId: jobData.campaignId,
+          userId: jobData.userId,
+          unitId: i,
+          perJobLimit: 1,
+          minimumInclude: 1,
+          info: req.body.info,
+        });
+        jobIds.push(job.id);
+      }
+    } else {
+      for (const website of jobData.websites) {
+        const job = await queue.add("publishWebsite", {
+          requestId, // unique per job for traceability
+          website,
+          content: jobData.content,
+          campaignId: jobData.campaignId,
+          userId: jobData.userId,
+          minimumInclude: jobData.minimumInclude,
+          info: req.body.info,
+        });
+        jobIds.push(job.id);
+      }
     }
 
     // Track campaign jobs and set total count if we have a campaign ID

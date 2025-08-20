@@ -95,6 +95,9 @@ const getParentCategory = (granularCategory) => {
   ) {
     return "social_media";
   }
+  if (lowerCaseCategory.includes("linked_comment")) {
+    return "linked_comment";
+  }
 
   // Default to 'other' or the original granular category if no specific mapping
   return "other"; // Or consider returning granularCategory for unmapped types
@@ -206,12 +209,24 @@ const processWebsite = async (jobDetails, job) => {
       const parentCategory = getParentCategory(result.category);
 
       // Merge logs with existing campaign logs
+      // Determine target units for linked_comment (if applicable)
+      let linkedTarget = null;
+      try {
+        const sd = job?.data?.info?.sites_details;
+        if (Array.isArray(sd)) {
+          const det = sd.find((d) => String(d.category).toLowerCase() === 'linked_comment');
+          if (det && det.minimumInclude != null) linkedTarget = Number(det.minimumInclude);
+        }
+      } catch {}
+
       await mergeCampaignLogs(jobDetails.campaignId, {
         userId: jobDetails.userId,
         website: jobDetails.website.url,
         category: parentCategory,
         logs: logsToPush,
         result: result.success ? "success" : "failure",
+        unitId: job?.data?.unitId || null,
+        linkedTarget,
       });
 
       console.log(
@@ -498,6 +513,7 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
               results: {},
               createdAt: dbData.created_at,
               lastUpdated: new Date().toISOString(),
+              prevStatus: dbData.status,
             };
 
             // Parse existing database logs into Redis format
@@ -625,7 +641,9 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
     }
 
     // Create unique identifier for this website attempt
-    const websiteKey = `${newLogData.website}_${newLogData.category}`;
+    const websiteKey = (newLogData.category === 'linked_comment' && newLogData.unitId)
+      ? `${newLogData.website}_${newLogData.category}_${newLogData.unitId}`
+      : `${newLogData.website}_${newLogData.category}`;
 
     // Initialize attempt tracking for this website (preserve existing attempts)
     if (!mergedLogs.attempts[websiteKey]) {
@@ -705,25 +723,33 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
 
     mergedLogs.logs[newLogData.category].logs.push(...logsToAdd);
 
-    // Calculate accurate statistics based on unique websites
-    const uniqueWebsites = Object.keys(mergedLogs.results);
-    const successfulWebsites = uniqueWebsites.filter(
-      (key) => mergedLogs.results[key].finalResult === "success",
-    );
+    // Calculate statistics with special handling for linked_comment
+    const uniqueKeys = Object.keys(mergedLogs.results);
 
-    mergedLogs.successCount = successfulWebsites.length;
-    mergedLogs.totalCount = uniqueWebsites.length;
+    if (newLogData.category === 'linked_comment') {
+      const successUnits = uniqueKeys.filter(
+        (k) => mergedLogs.results[k].finalResult === 'success'
+      ).length;
+      // Use target from request if provided; fallback to number of keys
+      const targetUnits = Number(newLogData.linkedTarget) || uniqueKeys.length;
+      mergedLogs.successCount = successUnits;
+      mergedLogs.totalCount = targetUnits;
+      mergedLogs.logs[newLogData.category].result = `${successUnits}/${targetUnits}`;
+    } else {
+      const successfulWebsites = uniqueKeys.filter(
+        (key) => mergedLogs.results[key].finalResult === 'success',
+      );
+      mergedLogs.successCount = successfulWebsites.length;
+      mergedLogs.totalCount = uniqueKeys.length;
 
-    // Update result field for this category based on actual unique results
-    const categoryWebsites = uniqueWebsites.filter(
-      (key) => mergedLogs.results[key].category === newLogData.category,
-    );
-    const categorySuccesses = categoryWebsites.filter(
-      (key) => mergedLogs.results[key].finalResult === "success",
-    );
-
-    mergedLogs.logs[newLogData.category].result =
-      `${categorySuccesses.length}/${categoryWebsites.length}`;
+      const categoryWebsites = uniqueKeys.filter(
+        (key) => mergedLogs.results[key].category === newLogData.category,
+      );
+      const categorySuccesses = categoryWebsites.filter(
+        (key) => mergedLogs.results[key].finalResult === 'success',
+      );
+      mergedLogs.logs[newLogData.category].result = `${categorySuccesses.length}/${categoryWebsites.length}`;
+    }
 
     // Use Redis transaction to atomically update the data
     const multi = connection.multi();
@@ -785,8 +811,11 @@ const mergeCampaignLogs = async (campaignId, newLogData) => {
       }
 
       // Calculate overall status
-      const overallStatus =
-        mergedLogs.successCount > 0 ? "completed" : "failed";
+      // linked_comment rule: at least 1 success => completed; also preserve previously completed status
+      const prev = mergedLogs.prevStatus;
+      const overallStatus = (prev === 'completed' || mergedLogs.successCount > 0)
+        ? 'completed'
+        : 'failed';
       const overallResult = `${mergedLogs.successCount}/${mergedLogs.totalCount}`;
 
       const updatePayload = {
@@ -951,6 +980,8 @@ const startAllCategoryWorkers = () => {
                   },
                 ],
                 result: "failure",
+                unitId: job?.data?.unitId || null,
+                linkedTarget: (job?.data?.info?.sites_details || []).find(d => String(d.category).toLowerCase() === 'linked_comment')?.minimumInclude ?? null,
               });
             }
 
